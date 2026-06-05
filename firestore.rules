@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{uid} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth.uid == uid;
+    }
+
+    match /meetings/{meetingId} {
+      allow read:   if request.auth != null;
+      allow create: if request.auth != null
+                    && request.resource.data.hostId == request.auth.uid;
+      allow update: if request.auth != null
+                    && (resource.data.hostId == request.auth.uid
+                        || request.auth.uid in resource.data.participants);
+      allow delete: if request.auth != null
+                    && resource.data.hostId == request.auth.uid;
+
+      match /chat/{msgId} {
+        allow read:          if request.auth != null;
+        allow create:        if request.auth != null
+                             && request.resource.data.uid == request.auth.uid;
+        allow update, delete: if false;
+      }
+
+      match /summaries/{summaryId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+  }
+}
