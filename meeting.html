@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>MeetAI — Meeting</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -127,9 +127,19 @@
       <path d="M5 20V9l7-5 7 5v11"/>
       <path d="M2 9l3 3 7-7 7 7 3-3"/>
     </symbol>
+    <symbol id="ic-sidebar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+      <line x1="9" y1="3" x2="9" y2="21"/>
+    </symbol>
   </svg>
 </head>
 <body>
+
+<!-- ══ AI BROADCAST BANNER (visible to all participants) ══════ -->
+<div id="aiBroadcastBanner" class="ai-broadcast-banner" style="display:none;">
+  <span class="ai-broadcast-dot"></span>
+  <span id="aiBroadcastText">🤖 MeetAI is active…</span>
+</div>
 
 <div class="meeting-root">
 
@@ -137,11 +147,11 @@
   <div class="meeting-topbar">
     <div class="meeting-topbar-left">
       <div class="logo" style="font-size:1.05rem;">Meet<span style="color:var(--accent)">AI</span></div>
-      <div style="width:1px;height:20px;background:var(--border);"></div>
-      <span id="meetingTitle" style="font-weight:600;font-size:0.92rem;">Loading…</span>
+      <div class="topbar-divider"></div>
+      <span id="meetingTitle" class="meeting-title-text">Loading…</span>
       <button class="tb-icon-btn" id="meetingIdDisplay" onclick="copyMeetingLink()" title="Copy invite link">
         <svg width="14" height="14"><use href="#ic-link"/></svg>
-        Copy Invite
+        <span class="tb-btn-label">Invite</span>
       </button>
       <span id="meetingTimer" class="meeting-timer">
         <svg width="13" height="13" style="opacity:.6"><use href="#ic-clock"/></svg>
@@ -150,15 +160,17 @@
     </div>
     <div class="meeting-topbar-right">
       <span id="participantCount" class="badge badge-accent">1</span>
-      <span style="font-size:0.78rem;color:var(--text-muted);margin-right:6px;">participant(s)</span>
-      <button class="btn btn-ghost btn-sm" onclick="toggleSidebar()">
-        <svg width="14" height="14"><use href="#ic-chat"/></svg> Chat
+      <span class="participant-label">participant(s)</span>
+      <button class="btn btn-ghost btn-sm tb-sidebar-btn" onclick="toggleSidebar()">
+        <svg width="14" height="14"><use href="#ic-sidebar"/></svg>
       </button>
-      <button class="btn btn-ghost btn-sm" onclick="openAITerminal()">
-        <svg width="14" height="14"><use href="#ic-bot"/></svg> Ask AI
+      <button class="btn btn-ghost btn-sm tb-ai-btn" onclick="openAITerminal()">
+        <svg width="14" height="14"><use href="#ic-bot"/></svg>
+        <span class="tb-btn-label">AI</span>
       </button>
-      <button class="btn btn-danger btn-sm" style="margin-left:6px;" onclick="leaveMeeting()">
-        <svg width="14" height="14"><use href="#ic-logout"/></svg> Leave
+      <button class="btn btn-danger btn-sm" onclick="leaveMeeting()">
+        <svg width="14" height="14"><use href="#ic-logout"/></svg>
+        <span class="tb-btn-label">Leave</span>
       </button>
     </div>
   </div>
@@ -237,6 +249,12 @@
 
     <!-- Sidebar -->
     <div class="meeting-sidebar" id="meetingSidebar">
+      <div class="sidebar-header-mobile">
+        <span style="font-weight:700;font-size:0.9rem;">Chat & People</span>
+        <button class="btn btn-ghost btn-sm" onclick="toggleSidebar()" style="padding:4px 8px;">
+          <svg width="14" height="14"><use href="#ic-close"/></svg>
+        </button>
+      </div>
       <div class="sidebar-tabs">
         <div class="sidebar-tab active" id="tab-chat"   onclick="switchSidebarTab('chat')">
           <svg width="13" height="13"><use href="#ic-chat"/></svg> Chat
@@ -294,7 +312,7 @@
       <span class="control-btn-label">Camera</span>
     </div>
 
-    <div class="ctrl-item">
+    <div class="ctrl-item screen-share-ctrl">
       <button class="control-btn" id="shareScreenBtn" onclick="handleScreenShare()" title="Share Screen">
         <svg width="22" height="22" id="screenIcon"><use href="#ic-monitor"/></svg>
       </button>
@@ -315,6 +333,14 @@
         <svg width="22" height="22"><use href="#ic-hand"/></svg>
       </button>
       <span class="control-btn-label">Hand</span>
+    </div>
+
+    <!-- Chat shortcut on mobile -->
+    <div class="ctrl-item mobile-chat-ctrl">
+      <button class="control-btn" onclick="toggleSidebar()" title="Chat">
+        <svg width="22" height="22"><use href="#ic-chat"/></svg>
+      </button>
+      <span class="control-btn-label">Chat</span>
     </div>
 
     <!-- Record — host only, hidden until updateHostControls() -->
@@ -400,9 +426,12 @@ function switchSidebarTab(tab) {
   document.getElementById("tab-"  + tab).classList.add("active");
   document.getElementById("pane-" + tab).classList.add("active");
 }
+
+let _sidebarOpen = false;
 function toggleSidebar() {
   const sb = document.getElementById("meetingSidebar");
-  sb.style.display = (sb.style.display === "none") ? "flex" : "none";
+  _sidebarOpen = !_sidebarOpen;
+  sb.classList.toggle("sidebar-open", _sidebarOpen);
 }
 
 // ── Raise hand ──────────────────────────────────────────────
@@ -458,50 +487,31 @@ async function handleScreenShare() {
   }
 }
 function _updateScreenBtn(active) {
-  const btn = document.getElementById("shareScreenBtn");
-  const lbl = document.getElementById("shareScreenLabel");
-  const ico = document.getElementById("screenIcon");
-  if (!btn) return;
-  btn.classList.toggle("control-active", active);
-  if (lbl) lbl.textContent = active ? "Stop Share" : "Share";
-  if (ico) ico.querySelector("use").setAttribute("href", active ? "#ic-monitor-active" : "#ic-monitor");
+  const btn   = document.getElementById("shareScreenBtn");
+  const icon  = document.getElementById("screenIcon");
+  const label = document.getElementById("shareScreenLabel");
+  if (btn)   btn.classList.toggle("control-active", active);
+  if (icon)  icon.querySelector("use").setAttribute("href", active ? "#ic-monitor-active" : "#ic-monitor");
+  if (label) label.textContent = active ? "Stop Share" : "Share";
 }
 
-// ── Mic / Camera icon sync (called from meeting.js) ─────────
-function _syncMicIcon(enabled) {
-  const btn = document.getElementById("toggleMicBtn");
-  const ico = document.getElementById("micIcon");
-  const lbl = btn?.nextElementSibling;
-  if (ico) ico.querySelector("use").setAttribute("href", enabled ? "#ic-mic" : "#ic-mic-off");
-  if (btn) { btn.classList.toggle("control-off", !enabled); }
-  if (lbl) lbl.textContent = enabled ? "Mute" : "Unmute";
+// ── Mic/Cam icon sync ───────────────────────────────────────
+function _syncMicIcon(on) {
+  const btn  = document.getElementById("toggleMicBtn");
+  const icon = document.getElementById("micIcon");
+  if (btn)  btn.classList.toggle("control-off", !on);
+  if (icon) icon.querySelector("use").setAttribute("href", on ? "#ic-mic" : "#ic-mic-off");
 }
-function _syncCamIcon(enabled) {
-  const btn = document.getElementById("toggleCamBtn");
-  const ico = document.getElementById("camIcon");
-  const lbl = btn?.nextElementSibling;
-  if (ico) ico.querySelector("use").setAttribute("href", enabled ? "#ic-video" : "#ic-video-off");
-  if (btn) { btn.classList.toggle("control-off", !enabled); }
-  if (lbl) lbl.textContent = enabled ? "Camera" : "Cam Off";
-}
-function _syncRecordIcon(recording) {
-  const btn = document.getElementById("recordBtn");
-  const ico = document.getElementById("recordIcon");
-  const lbl = document.getElementById("recordLabel");
-  if (ico) ico.querySelector("use").setAttribute("href", recording ? "#ic-stop" : "#ic-record");
-  if (btn) btn.classList.toggle("recording", recording);
-  if (lbl) lbl.textContent = recording ? "Stop Rec" : "Record";
-  if (btn) btn.title = recording ? "Stop Recording" : "Start Recording";
+function _syncCamIcon(on) {
+  const btn  = document.getElementById("toggleCamBtn");
+  const icon = document.getElementById("camIcon");
+  if (btn)  btn.classList.toggle("control-off", !on);
+  if (icon) icon.querySelector("use").setAttribute("href", on ? "#ic-video" : "#ic-video-off");
 }
 
-window.addEventListener("DOMContentLoaded", () => {
-  const mid = new URLSearchParams(location.search).get("id");
-  if (mid) {
-    const saved = localStorage.getItem("meetai_notes_" + mid);
-    if (saved) document.getElementById("privateNotes").value = saved;
-  }
-  initMeeting();
-});
+// ── Init ────────────────────────────────────────────────────
+hideAuthSpinner();
+initMeeting();
 </script>
 </body>
 </html>

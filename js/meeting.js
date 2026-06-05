@@ -182,6 +182,7 @@ async function initMeeting() {
     try { setupAI();            } catch (e) { console.error("AI init:", e); }
     try { setupChat();          } catch (e) { console.error("Chat init:", e); }
     try { setupPresenceDisplay(); } catch (e) { console.error("Presence init:", e); }
+    try { setupAIBroadcastListener(); } catch (e) { console.error("AI broadcast init:", e); }
     updateHostControls();
     startMeetingTimer();
     if (isHost) {
@@ -197,8 +198,6 @@ async function loadMeetingData() {
     const snap  = await _meetingRef.once("value");
 
     if (!snap.exists()) {
-      // Meeting may not have been created yet or rules are pending —
-      // keep UI functional with defaults instead of redirecting
       console.warn("Meeting not found in RTDB — using defaults");
       document.getElementById("meetingTitle").textContent = "Meeting";
       return;
@@ -232,7 +231,6 @@ async function loadMeetingData() {
     });
 
   } catch (err) {
-    // RTDB read failed (e.g. rules not yet published) — page still works
     console.warn("loadMeetingData failed:", err.message);
     document.getElementById("meetingTitle").textContent = "Meeting";
   }
@@ -257,12 +255,9 @@ async function setupLocalMedia() {
 }
 
 function attachLocalStream(stream) {
-  // Pass stream into the tile so the <video> element gets a srcObject immediately
   addParticipantTile(currentUser.uid, currentUser.displayName, currentUser.photoURL, true, stream);
-  // Belt-and-suspenders: set srcObject + mute in case the tile already existed
   const vidEl = document.getElementById("vid-" + currentUser.uid);
   if (vidEl) { vidEl.srcObject = stream; vidEl.muted = true; }
-  // Sync control-bar icons to the actual enabled state
   if (typeof _syncCamIcon === "function") _syncCamIcon(videoEnabled);
   if (typeof _syncMicIcon === "function") _syncMicIcon(audioEnabled);
 }
@@ -322,9 +317,30 @@ function addParticipantTile(uid, name, photo, isLocal, stream) {
     grid.appendChild(tile);
   }
   const vidEl = document.getElementById("vid-" + uid);
-  if (stream && vidEl) vidEl.srcObject = stream;
+  if (stream && vidEl) {
+    vidEl.srcObject = stream;
+    // Attempt autoplay; if blocked, show a tap-to-unmute overlay
+    if (!isLocal) {
+      vidEl.play().catch(() => _showTapToUnmute(uid));
+    }
+  }
   _setTileVideoVisible(uid, isLocal ? videoEnabled : true);
   updateParticipantCount();
+}
+
+// ── Tap-to-unmute overlay (autoplay policy workaround) ──────
+function _showTapToUnmute(uid) {
+  const tile = document.getElementById("tile-" + uid);
+  if (!tile || tile.querySelector(".tap-unmute")) return;
+  const overlay = document.createElement("div");
+  overlay.className = "tap-unmute";
+  overlay.textContent = "🔊 Tap to hear";
+  overlay.onclick = () => {
+    const vid = document.getElementById("vid-" + uid);
+    if (vid) vid.play().catch(() => {});
+    overlay.remove();
+  };
+  tile.appendChild(overlay);
 }
 
 function removeParticipantTile(uid) {
@@ -466,7 +482,7 @@ function setupAI() {
 }
 
 function openAITerminal()  { document.getElementById("aiTerminalOverlay").classList.add("visible"); document.getElementById("aiInput")?.focus(); }
-function closeAITerminal() { document.getElementById("aiTerminalOverlay").classList.remove("visible"); aiManager.stopSpeaking(); }
+function closeAITerminal() { document.getElementById("aiTerminalOverlay").classList.remove("visible"); aiManager.stopSpeaking(); _broadcastAIActivity(null); }
 
 async function sendAIMessage() {
   const input = document.getElementById("aiInput");
@@ -475,12 +491,59 @@ async function sendAIMessage() {
   input.value = "";
   addAIChatBubble("user", text);
   showAITyping(true);
+
+  // Broadcast "AI thinking" to all participants
+  _broadcastAIActivity({ state: "thinking", invokedBy: currentUser.displayName || "A participant" });
+
   const reply = await aiManager.chat(text, transcription?.getFullText() || "");
   aiLastResponse = reply;
   showAITyping(false);
   addAIChatBubble("ai", reply);
-  aiManager.speak(reply, () => showAIStatus(""));
+
+  // Broadcast "AI speaking" to all participants
+  _broadcastAIActivity({ state: "speaking", invokedBy: currentUser.displayName || "A participant", message: reply.slice(0, 120) });
+
+  aiManager.speak(reply, () => {
+    showAIStatus("");
+    _broadcastAIActivity(null); // clear broadcast when done speaking
+  });
   showAIStatus("🔊 MeetAI is speaking…");
+}
+
+// ── AI Activity Broadcast (Firebase RTDB) ─────────────────
+function _broadcastAIActivity(data) {
+  if (!_meetingRef) return;
+  if (data) {
+    _meetingRef.child("aiActivity").set({
+      ...data,
+      updatedAt: firebase.database.ServerValue.TIMESTAMP
+    }).catch(() => {});
+  } else {
+    _meetingRef.child("aiActivity").remove().catch(() => {});
+  }
+}
+
+// ── Listen for AI Activity from other participants ─────────
+function setupAIBroadcastListener() {
+  if (!_meetingRef) return;
+  _meetingRef.child("aiActivity").on("value", snap => {
+    const data    = snap.val();
+    const banner  = document.getElementById("aiBroadcastBanner");
+    const bannerTxt = document.getElementById("aiBroadcastText");
+    if (!banner || !bannerTxt) return;
+    if (data) {
+      let msg = "";
+      if (data.state === "thinking") {
+        msg = `🤖 MeetAI is thinking… (asked by ${escapeHtml(data.invokedBy || "a participant")})`;
+      } else if (data.state === "speaking") {
+        msg = `🔊 MeetAI is speaking (asked by ${escapeHtml(data.invokedBy || "a participant")})`;
+      }
+      bannerTxt.textContent = msg;
+      banner.style.display  = "flex";
+    } else {
+      banner.style.display = "none";
+    }
+  });
 }
 
 function addAIChatBubble(role, text) {
@@ -495,7 +558,7 @@ function addAIChatBubble(role, text) {
 
 function showAITyping(show) { const el = document.getElementById("aiTypingIndicator"); if (el) el.style.display = show ? "block" : "none"; }
 function showAIStatus(msg)  { const el = document.getElementById("aiStatusBar");       if (el) el.textContent = msg; }
-function stopAI()     { aiManager.stopSpeaking(); showAIStatus("⏹ Stopped"); }
+function stopAI()     { aiManager.stopSpeaking(); showAIStatus("⏹ Stopped"); _broadcastAIActivity(null); }
 function continueAI() { if (aiLastResponse) { aiManager.speak(aiLastResponse, () => showAIStatus("")); showAIStatus("🔊 Resuming…"); } }
 
 async function autoSummarize() {
@@ -599,8 +662,6 @@ function startRecording() {
   recorder.start(webrtc.localStream, remoteStreams);
   const btn = document.getElementById("recordBtn");
   if (btn) { btn.classList.add("recording"); btn.title = "Stop Recording"; }
-  const label = document.querySelector("[data-rec-wrap] .control-btn-label");
-  if (label) label.textContent = "Stop Rec";
   showToast("🔴 Recording started");
 }
 
@@ -610,8 +671,6 @@ async function stopRecordingAndSave() {
   recorder   = null;
   const btn  = document.getElementById("recordBtn");
   if (btn) { btn.classList.remove("recording"); btn.title = "Start Recording"; }
-  const label = document.querySelector("[data-rec-wrap] .control-btn-label");
-  if (label) label.textContent = "Record";
   showToast("⏹ Recording stopped");
   return blob && blob.size > 0 ? blob : null;
 }
@@ -681,6 +740,7 @@ function _hideQueueIfEmpty() {
 async function leaveMeeting() {
   if (!confirm("Leave this meeting?")) return;
   if (recorder && recorder.isRecording) await recorder.stop();
+  _broadcastAIActivity(null);
   await _cleanup();
   window.location.href = "dashboard.html";
 }
@@ -724,6 +784,7 @@ async function _finishEndMeeting() {
   await triggerSummarize();
   if (transcription) await _persistTranscript(transcription.getFullText());
   db.ref("joinRequests/" + meetingId).remove();
+  _broadcastAIActivity(null);
   if (_meetingRef) await _meetingRef.update({ status: "ended", endedAt: firebase.database.ServerValue.TIMESTAMP });
   await _cleanup();
   window.location.href = "dashboard.html";
