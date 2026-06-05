@@ -8,6 +8,126 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/meeting.css">
+
+  <!-- Inline SVG icon definitions — no external CDN needed -->
+  <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="ic-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+      <line x1="12" y1="19" x2="12" y2="23"/>
+      <line x1="8"  y1="23" x2="16" y2="23"/>
+    </symbol>
+    <symbol id="ic-mic-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="1" y1="1" x2="23" y2="23"/>
+      <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/>
+      <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/>
+      <line x1="12" y1="19" x2="12" y2="23"/>
+      <line x1="8"  y1="23" x2="16" y2="23"/>
+    </symbol>
+    <symbol id="ic-video" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="23 7 16 12 23 17 23 7"/>
+      <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+    </symbol>
+    <symbol id="ic-video-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10"/>
+      <line x1="1" y1="1" x2="23" y2="23"/>
+    </symbol>
+    <symbol id="ic-monitor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2"/>
+      <polyline points="8 21 12 17 16 21"/>
+      <line x1="12" y1="17" x2="12" y2="21"/>
+    </symbol>
+    <symbol id="ic-monitor-active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2"/>
+      <path d="M8 21h8"/>
+      <line x1="12" y1="17" x2="12" y2="21"/>
+      <polyline points="9 8 12 5 15 8"/>
+      <line x1="12" y1="5" x2="12" y2="13"/>
+    </symbol>
+    <symbol id="ic-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </symbol>
+    <symbol id="ic-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="11" width="18" height="10" rx="2"/>
+      <circle cx="12" cy="5" r="2"/>
+      <path d="M12 7v4"/>
+      <line x1="8"  y1="16" x2="8"  y2="16"/>
+      <line x1="16" y1="16" x2="16" y2="16"/>
+    </symbol>
+    <symbol id="ic-hand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/>
+      <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/>
+      <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/>
+      <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>
+    </symbol>
+    <symbol id="ic-record" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="12" cy="12" r="8"/>
+    </symbol>
+    <symbol id="ic-stop" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="4" y="4" width="16" height="16" rx="2"/>
+    </symbol>
+    <symbol id="ic-phone-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07C9.44 17.29 7.76 15.93 6 14"/>
+      <path d="M2 2l20 20"/>
+      <path d="M6.26 6.26A16 16 0 0 0 2 12c0 3.14.9 6.06 2.44 8.54"/>
+    </symbol>
+    <symbol id="ic-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+    </symbol>
+    <symbol id="ic-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </symbol>
+    <symbol id="ic-notes" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="16" y1="13" x2="8" y2="13"/>
+      <line x1="16" y1="17" x2="8" y2="17"/>
+      <polyline points="10 9 9 9 8 9"/>
+    </symbol>
+    <symbol id="ic-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+      <polyline points="16 17 21 12 16 7"/>
+      <line x1="21" y1="12" x2="9" y2="12"/>
+    </symbol>
+    <symbol id="ic-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+      <line x1="1" y1="1" x2="23" y2="23"/>
+    </symbol>
+    <symbol id="ic-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </symbol>
+    <symbol id="ic-square-stop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+    </symbol>
+    <symbol id="ic-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="7 10 12 15 17 10"/>
+      <line x1="12" y1="15" x2="12" y2="3"/>
+    </symbol>
+    <symbol id="ic-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13"/>
+      <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+    </symbol>
+    <symbol id="ic-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="18" y1="6"  x2="6"  y2="18"/>
+      <line x1="6"  y1="6"  x2="18" y2="18"/>
+    </symbol>
+    <symbol id="ic-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <polyline points="12 6 12 12 16 14"/>
+    </symbol>
+    <symbol id="ic-crown" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 20h20"/>
+      <path d="M5 20V9l7-5 7 5v11"/>
+      <path d="M2 9l3 3 7-7 7 7 3-3"/>
+    </symbol>
+  </svg>
 </head>
 <body>
 
@@ -16,34 +136,54 @@
   <!-- ══ TOP BAR ═══════════════════════════════════════════ -->
   <div class="meeting-topbar">
     <div class="meeting-topbar-left">
-      <div class="logo" style="font-size:1.1rem;">Meet<span style="color:var(--accent)">AI</span></div>
+      <div class="logo" style="font-size:1.05rem;">Meet<span style="color:var(--accent)">AI</span></div>
       <div style="width:1px;height:20px;background:var(--border);"></div>
-      <span id="meetingTitle" style="font-weight:600;font-size:0.95rem;">Loading…</span>
-      <span class="meeting-id-chip" id="meetingIdDisplay" onclick="copyMeetingLink()" title="Copy invite link">🔗 copy invite</span>
-      <span id="meetingTimer" class="meeting-timer">00:00</span>
+      <span id="meetingTitle" style="font-weight:600;font-size:0.92rem;">Loading…</span>
+      <button class="tb-icon-btn" id="meetingIdDisplay" onclick="copyMeetingLink()" title="Copy invite link">
+        <svg width="14" height="14"><use href="#ic-link"/></svg>
+        Copy Invite
+      </button>
+      <span id="meetingTimer" class="meeting-timer">
+        <svg width="13" height="13" style="opacity:.6"><use href="#ic-clock"/></svg>
+        00:00
+      </span>
     </div>
     <div class="meeting-topbar-right">
-      <span id="participantCount" class="badge badge-accent" style="margin-right:4px;">1</span>
-      <span style="font-size:0.8rem;color:var(--text-muted);margin-right:8px;">participant(s)</span>
-      <button class="btn btn-ghost btn-sm" onclick="toggleSidebar()">💬 Chat</button>
-      <button class="btn btn-ghost btn-sm" onclick="openAITerminal()">🤖 Ask AI</button>
-      <button class="btn btn-danger btn-sm" onclick="leaveMeeting()" style="margin-left:8px;">Leave</button>
+      <span id="participantCount" class="badge badge-accent">1</span>
+      <span style="font-size:0.78rem;color:var(--text-muted);margin-right:6px;">participant(s)</span>
+      <button class="btn btn-ghost btn-sm" onclick="toggleSidebar()">
+        <svg width="14" height="14"><use href="#ic-chat"/></svg> Chat
+      </button>
+      <button class="btn btn-ghost btn-sm" onclick="openAITerminal()">
+        <svg width="14" height="14"><use href="#ic-bot"/></svg> Ask AI
+      </button>
+      <button class="btn btn-danger btn-sm" style="margin-left:6px;" onclick="leaveMeeting()">
+        <svg width="14" height="14"><use href="#ic-logout"/></svg> Leave
+      </button>
     </div>
   </div>
 
   <!-- ══ HOST CONTROLS STRIP ═══════════════════════════════ -->
   <div id="hostControls">
-    <span class="host-label">👑 HOST</span>
-    <button class="btn btn-ghost btn-sm" onclick="toggleAIToolsVisibility()" id="toggleAIVisBtn">🙈 Hide AI Tools</button>
-    <button class="btn btn-danger btn-sm" onclick="endMeeting()">⏹ End Meeting</button>
+    <span class="host-label">
+      <svg width="13" height="13"><use href="#ic-crown"/></svg> HOST
+    </span>
+    <button class="btn btn-ghost btn-sm" onclick="toggleAIToolsVisibility()" id="toggleAIVisBtn">
+      <svg width="13" height="13" id="aiVisIcon"><use href="#ic-eye-off"/></svg>
+      Hide AI Tools
+    </button>
+    <button class="btn btn-danger btn-sm" onclick="endMeeting()">
+      <svg width="13" height="13"><use href="#ic-square-stop"/></svg>
+      End Meeting
+    </button>
   </div>
 
-  <!-- ══ ADMISSION QUEUE (host only) ═══════════════════════ -->
+  <!-- ══ ADMISSION QUEUE ════════════════════════════════════ -->
   <div id="admissionQueue" style="display:none;"></div>
 
   <!-- ══ NOTE-TAKER BAR ════════════════════════════════════ -->
   <div class="note-taker-bar ai-tools-panel">
-    <!-- Live Transcription -->
+    <!-- Transcription -->
     <div class="note-taker-section">
       <div class="note-taker-header">
         <span><span class="status-dot"></span>LIVE TRANSCRIPTION</span>
@@ -52,18 +192,20 @@
       <div id="transcriptContent"></div>
       <div class="note-taker-footer">
         <div style="display:flex;gap:6px;">
-          <button class="btn btn-sm btn-ghost" onclick="transcription&&transcription.pause()" title="Pause">⏸</button>
-          <button class="btn btn-sm btn-ghost" onclick="transcription&&transcription.resume()" title="Resume">▶</button>
-          <button class="btn btn-sm btn-ghost" onclick="downloadTranscript()" title="Download">⬇️ .txt</button>
+          <button class="btn btn-sm btn-ghost" onclick="transcription&&transcription.pause()" title="Pause">Pause</button>
+          <button class="btn btn-sm btn-ghost" onclick="transcription&&transcription.resume()" title="Resume">Resume</button>
+          <button class="btn btn-sm btn-ghost" onclick="downloadTranscript()">
+            <svg width="12" height="12"><use href="#ic-download"/></svg> .txt
+          </button>
         </div>
-        <button class="btn btn-sm btn-ghost" onclick="(document.getElementById('transcriptContent').innerHTML='') && transcription&&transcription.clearText()">🗑 Clear</button>
+        <button class="btn btn-sm btn-ghost" onclick="document.getElementById('transcriptContent').innerHTML='';transcription&&transcription.clearText()">Clear</button>
       </div>
     </div>
 
     <!-- AI Summarizer -->
     <div class="note-taker-section">
       <div class="note-taker-header">
-        <span>📖 AI SUMMARIZER (Mistral)</span>
+        <span><svg width="13" height="13" style="vertical-align:-2px"><use href="#ic-bot"/></svg> AI SUMMARIZER</span>
         <label class="toggle-wrap" style="gap:6px;">
           <input type="checkbox" id="bookModeToggle">
           <span class="toggle-track" style="width:32px;height:18px;"></span>
@@ -75,7 +217,9 @@
       </div>
       <div class="note-taker-footer">
         <button class="btn btn-sm btn-primary" id="summarizeBtn" onclick="triggerSummarize()">Summarize Now</button>
-        <button class="btn btn-sm btn-ghost" onclick="downloadSummary()">⬇️ .txt</button>
+        <button class="btn btn-sm btn-ghost" onclick="downloadSummary()">
+          <svg width="12" height="12"><use href="#ic-download"/></svg> .txt
+        </button>
       </div>
     </div>
   </div>
@@ -83,7 +227,7 @@
   <!-- ══ MAIN BODY ══════════════════════════════════════════ -->
   <div class="meeting-body">
 
-    <!-- Video area -->
+    <!-- Video grid -->
     <div class="meeting-main" id="meetingMain">
       <div class="screen-preview-wrap" id="screenPreviewWrap">
         <video id="screenPreview" autoplay playsinline muted></video>
@@ -94,9 +238,15 @@
     <!-- Sidebar -->
     <div class="meeting-sidebar" id="meetingSidebar">
       <div class="sidebar-tabs">
-        <div class="sidebar-tab active" id="tab-chat"   onclick="switchSidebarTab('chat')">Chat</div>
-        <div class="sidebar-tab"        id="tab-people" onclick="switchSidebarTab('people')">People</div>
-        <div class="sidebar-tab"        id="tab-notes"  onclick="switchSidebarTab('notes')">Notes</div>
+        <div class="sidebar-tab active" id="tab-chat"   onclick="switchSidebarTab('chat')">
+          <svg width="13" height="13"><use href="#ic-chat"/></svg> Chat
+        </div>
+        <div class="sidebar-tab" id="tab-people" onclick="switchSidebarTab('people')">
+          <svg width="13" height="13"><use href="#ic-users"/></svg> People
+        </div>
+        <div class="sidebar-tab" id="tab-notes"  onclick="switchSidebarTab('notes')">
+          <svg width="13" height="13"><use href="#ic-notes"/></svg> Notes
+        </div>
       </div>
 
       <div class="sidebar-pane active" id="pane-chat">
@@ -104,7 +254,9 @@
         <div class="chat-input-wrap">
           <input class="input" id="chatInput" placeholder="Message everyone…"
             onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage();}">
-          <button class="btn btn-primary btn-sm" onclick="sendChatMessage()">Send</button>
+          <button class="btn btn-primary btn-sm" onclick="sendChatMessage()">
+            <svg width="14" height="14"><use href="#ic-send"/></svg>
+          </button>
         </div>
       </div>
 
@@ -117,7 +269,9 @@
           <p style="font-size:0.8rem;color:var(--text-muted);margin:0;">Private notes — only visible to you.</p>
           <textarea class="textarea" id="privateNotes" style="flex:1;resize:none;min-height:0;"
             placeholder="Type your notes here…" oninput="savePrivateNotes()"></textarea>
-          <button class="btn btn-ghost btn-sm" onclick="downloadPrivateNotes()">⬇️ Download Notes</button>
+          <button class="btn btn-ghost btn-sm" onclick="downloadPrivateNotes()">
+            <svg width="13" height="13"><use href="#ic-download"/></svg> Download Notes
+          </button>
         </div>
       </div>
     </div>
@@ -125,39 +279,61 @@
 
   <!-- ══ CONTROL BAR ════════════════════════════════════════ -->
   <div class="meeting-controls">
-    <div style="position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:20px;">
-      <button class="control-btn" id="toggleMicBtn" onclick="toggleAudio()" title="Mute / Unmute">🎤</button>
-      <span class="control-btn-label">Mic</span>
+
+    <div class="ctrl-item">
+      <button class="control-btn" id="toggleMicBtn" onclick="toggleAudio()" title="Mute / Unmute">
+        <svg width="22" height="22" id="micIcon"><use href="#ic-mic"/></svg>
+      </button>
+      <span class="control-btn-label">Mute</span>
     </div>
-    <div style="position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:20px;">
-      <button class="control-btn" id="toggleCamBtn" onclick="toggleVideo()" title="Camera">📷</button>
+
+    <div class="ctrl-item">
+      <button class="control-btn" id="toggleCamBtn" onclick="toggleVideo()" title="Camera">
+        <svg width="22" height="22" id="camIcon"><use href="#ic-video"/></svg>
+      </button>
       <span class="control-btn-label">Camera</span>
     </div>
-    <div style="position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:20px;">
-      <button class="control-btn" id="shareScreenBtn" onclick="handleScreenShare()" title="Share Screen">🖥️</button>
-      <span class="control-btn-label">Share</span>
+
+    <div class="ctrl-item">
+      <button class="control-btn" id="shareScreenBtn" onclick="handleScreenShare()" title="Share Screen">
+        <svg width="22" height="22" id="screenIcon"><use href="#ic-monitor"/></svg>
+      </button>
+      <span class="control-btn-label" id="shareScreenLabel">Share</span>
     </div>
+
     <div class="controls-divider"></div>
-    <div style="position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:20px;">
-      <button class="control-btn" onclick="openAITerminal()" title="AI Assistant" style="background:var(--accent-dim);color:var(--accent);">🤖</button>
+
+    <div class="ctrl-item">
+      <button class="control-btn" onclick="openAITerminal()" title="AI Assistant" style="background:var(--accent-dim);color:var(--accent);">
+        <svg width="22" height="22"><use href="#ic-bot"/></svg>
+      </button>
       <span class="control-btn-label">Ask AI</span>
     </div>
-    <div style="position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:20px;">
-      <button class="control-btn" id="raiseHandBtn" onclick="toggleRaiseHand()" title="Raise Hand">✋</button>
+
+    <div class="ctrl-item">
+      <button class="control-btn" id="raiseHandBtn" onclick="toggleRaiseHand()" title="Raise Hand">
+        <svg width="22" height="22"><use href="#ic-hand"/></svg>
+      </button>
       <span class="control-btn-label">Hand</span>
     </div>
-    <!-- Record button — host only, hidden until updateHostControls() runs -->
-    <div data-rec-wrap style="position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:20px;">
-      <button class="control-btn" id="recordBtn"
-        onclick="toggleRecording()" title="Start Recording"
-        style="display:none;">⏺</button>
-      <span class="control-btn-label">Record</span>
+
+    <!-- Record — host only, hidden until updateHostControls() -->
+    <div class="ctrl-item" id="recordWrap" style="display:none;">
+      <button class="control-btn" id="recordBtn" onclick="toggleRecording()" title="Start Recording">
+        <svg width="20" height="20" id="recordIcon"><use href="#ic-record"/></svg>
+      </button>
+      <span class="control-btn-label" id="recordLabel">Record</span>
     </div>
+
     <div class="controls-divider"></div>
-    <div style="position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:20px;">
-      <button class="control-btn control-leave" onclick="leaveMeeting()" title="Leave">📞</button>
+
+    <div class="ctrl-item">
+      <button class="control-btn control-leave" onclick="leaveMeeting()" title="Leave">
+        <svg width="22" height="22"><use href="#ic-phone-off"/></svg>
+      </button>
       <span class="control-btn-label">Leave</span>
     </div>
+
   </div>
 
 </div><!-- /meeting-root -->
@@ -166,20 +342,28 @@
 <div class="ai-terminal-overlay" id="aiTerminalOverlay">
   <div class="ai-terminal">
     <div class="ai-terminal-header">
-      <h3>MeetAI Assistant <span style="font-size:.7rem;color:var(--text-muted);font-weight:400;">powered by Mistral</span></h3>
+      <h3>
+        <svg width="16" height="16" style="vertical-align:-2px;margin-right:6px;"><use href="#ic-bot"/></svg>
+        MeetAI Assistant
+        <span style="font-size:.7rem;color:var(--text-muted);font-weight:400;margin-left:6px;">powered by Mistral</span>
+      </h3>
       <div class="ai-terminal-controls">
-        <button class="btn btn-sm btn-ghost" onclick="stopAI()"     title="Stop AI speech">⏹ Stop</button>
-        <button class="btn btn-sm btn-ghost" onclick="continueAI()" title="Resume last response">▶ Continue</button>
-        <button class="btn btn-sm btn-ghost" onclick="closeAITerminal()">✕ Close</button>
+        <button class="btn btn-sm btn-ghost" onclick="stopAI()"     title="Stop AI speech">Stop</button>
+        <button class="btn btn-sm btn-ghost" onclick="continueAI()" title="Resume last response">Continue</button>
+        <button class="btn btn-sm btn-ghost" onclick="closeAITerminal()">
+          <svg width="13" height="13"><use href="#ic-close"/></svg>
+        </button>
       </div>
     </div>
     <div class="ai-status-bar" id="aiStatusBar"></div>
     <div id="aiChatLog">
       <div class="ai-bubble ai-bubble-ai">
-        <div class="ai-bubble-label">🤖 MeetAI (Mistral)</div>
+        <div class="ai-bubble-label">
+          <svg width="13" height="13"><use href="#ic-bot"/></svg> MeetAI (Mistral)
+        </div>
         <div class="ai-bubble-text">
           Hi! I'm your AI meeting assistant. I can see the live transcript and help you summarize, answer questions, or brainstorm.<br><br>
-          <strong>Tips:</strong> Say "Stop" to silence me. Say "Continue" to resume. I auto-pause when you speak.
+          <strong>Tips:</strong> I can see everything said in this meeting. Ask me anything.
         </div>
       </div>
     </div>
@@ -187,15 +371,14 @@
     <div class="ai-input-row">
       <input class="input" id="aiInput" placeholder="Ask anything about this meeting…"
         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAIMessage();}">
-      <button class="btn btn-primary" onclick="sendAIMessage()">Send</button>
+      <button class="btn btn-primary" onclick="sendAIMessage()">
+        <svg width="15" height="15"><use href="#ic-send"/></svg>
+      </button>
     </div>
   </div>
 </div>
 
-<!-- Error banner -->
 <div id="meetingError"></div>
-
-<!-- Spinner -->
 <div class="spinner-overlay" id="authSpinner" style="display:none;"><div class="spinner"></div></div>
 
 <!-- ══ SCRIPTS ════════════════════════════════════════════════ -->
@@ -214,12 +397,12 @@
 function switchSidebarTab(tab) {
   document.querySelectorAll(".sidebar-tab").forEach(t => t.classList.remove("active"));
   document.querySelectorAll(".sidebar-pane").forEach(p => p.classList.remove("active"));
-  document.getElementById(`tab-${tab}`).classList.add("active");
-  document.getElementById(`pane-${tab}`).classList.add("active");
+  document.getElementById("tab-"  + tab).classList.add("active");
+  document.getElementById("pane-" + tab).classList.add("active");
 }
 function toggleSidebar() {
   const sb = document.getElementById("meetingSidebar");
-  sb.style.display = sb.style.display === "none" ? "flex" : "none";
+  sb.style.display = (sb.style.display === "none") ? "flex" : "none";
 }
 
 // ── Raise hand ──────────────────────────────────────────────
@@ -228,32 +411,25 @@ function toggleRaiseHand() {
   handRaised = !handRaised;
   const btn = document.getElementById("raiseHandBtn");
   btn.style.background = handRaised ? "var(--warning)" : "";
+  btn.style.color      = handRaised ? "#000" : "";
   if (window.webrtc) webrtc.presenceRef?.update({ handRaised });
-  if (handRaised) showToast("✋ You raised your hand");
+  if (handRaised) showToast("Hand raised — everyone can see it");
 }
 
 // ── Private notes ───────────────────────────────────────────
 function savePrivateNotes() {
   const mid = new URLSearchParams(location.search).get("id");
-  if (mid) localStorage.setItem(`meetai_notes_${mid}`, document.getElementById("privateNotes").value);
+  if (mid) localStorage.setItem("meetai_notes_" + mid, document.getElementById("privateNotes").value);
 }
 function downloadPrivateNotes() {
   const mid  = new URLSearchParams(location.search).get("id") || "meeting";
   const text = document.getElementById("privateNotes").value;
   const a    = Object.assign(document.createElement("a"), {
-    href: URL.createObjectURL(new Blob([text], {type:"text/plain"})),
-    download: `private-notes-${mid}.txt`
+    href: URL.createObjectURL(new Blob([text], { type: "text/plain" })),
+    download: "private-notes-" + mid + ".txt"
   });
   a.click();
 }
-window.addEventListener("DOMContentLoaded", () => {
-  const mid = new URLSearchParams(location.search).get("id");
-  if (mid) {
-    const saved = localStorage.getItem(`meetai_notes_${mid}`);
-    if (saved) document.getElementById("privateNotes").value = saved;
-  }
-  initMeeting();
-});
 
 // ── Screen share ────────────────────────────────────────────
 async function handleScreenShare() {
@@ -264,13 +440,13 @@ async function handleScreenShare() {
         window.screenSharing = false;
         document.getElementById("screenPreviewWrap").classList.remove("active");
         main.classList.remove("screen-active");
-        _updateScreenBtn();
+        _updateScreenBtn(false);
       });
       window.screenSharing = true;
       document.getElementById("screenPreview").srcObject = stream;
       document.getElementById("screenPreviewWrap").classList.add("active");
       main.classList.add("screen-active");
-      _updateScreenBtn();
+      _updateScreenBtn(true);
     } catch (_) {}
   } else {
     await webrtc.stopScreenShare();
@@ -278,15 +454,54 @@ async function handleScreenShare() {
     document.getElementById("screenPreview").srcObject = null;
     document.getElementById("screenPreviewWrap").classList.remove("active");
     main.classList.remove("screen-active");
-    _updateScreenBtn();
+    _updateScreenBtn(false);
   }
 }
-function _updateScreenBtn() {
+function _updateScreenBtn(active) {
   const btn = document.getElementById("shareScreenBtn");
+  const lbl = document.getElementById("shareScreenLabel");
+  const ico = document.getElementById("screenIcon");
   if (!btn) return;
-  btn.textContent = window.screenSharing ? "🖥️🔴" : "🖥️";
-  btn.classList.toggle("control-active", !!window.screenSharing);
+  btn.classList.toggle("control-active", active);
+  if (lbl) lbl.textContent = active ? "Stop Share" : "Share";
+  if (ico) ico.querySelector("use").setAttribute("href", active ? "#ic-monitor-active" : "#ic-monitor");
 }
+
+// ── Mic / Camera icon sync (called from meeting.js) ─────────
+function _syncMicIcon(enabled) {
+  const btn = document.getElementById("toggleMicBtn");
+  const ico = document.getElementById("micIcon");
+  const lbl = btn?.nextElementSibling;
+  if (ico) ico.querySelector("use").setAttribute("href", enabled ? "#ic-mic" : "#ic-mic-off");
+  if (btn) { btn.classList.toggle("control-off", !enabled); }
+  if (lbl) lbl.textContent = enabled ? "Mute" : "Unmute";
+}
+function _syncCamIcon(enabled) {
+  const btn = document.getElementById("toggleCamBtn");
+  const ico = document.getElementById("camIcon");
+  const lbl = btn?.nextElementSibling;
+  if (ico) ico.querySelector("use").setAttribute("href", enabled ? "#ic-video" : "#ic-video-off");
+  if (btn) { btn.classList.toggle("control-off", !enabled); }
+  if (lbl) lbl.textContent = enabled ? "Camera" : "Cam Off";
+}
+function _syncRecordIcon(recording) {
+  const btn = document.getElementById("recordBtn");
+  const ico = document.getElementById("recordIcon");
+  const lbl = document.getElementById("recordLabel");
+  if (ico) ico.querySelector("use").setAttribute("href", recording ? "#ic-stop" : "#ic-record");
+  if (btn) btn.classList.toggle("recording", recording);
+  if (lbl) lbl.textContent = recording ? "Stop Rec" : "Record";
+  if (btn) btn.title = recording ? "Stop Recording" : "Start Recording";
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  const mid = new URLSearchParams(location.search).get("id");
+  if (mid) {
+    const saved = localStorage.getItem("meetai_notes_" + mid);
+    if (saved) document.getElementById("privateNotes").value = saved;
+  }
+  initMeeting();
+});
 </script>
 </body>
 </html>
