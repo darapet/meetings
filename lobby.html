@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MeetAI — Waiting Room</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: var(--bg-primary); }
+
+    .lobby-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 32px;
+      width: 100%;
+      max-width: 480px;
+      padding: 24px;
+    }
+
+    .lobby-logo { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.5px; }
+    .lobby-logo span { color: var(--accent); }
+
+    .lobby-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 40px 36px;
+      width: 100%;
+      text-align: center;
+      box-shadow: var(--shadow);
+    }
+
+    /* Camera preview */
+    .preview-wrap {
+      width: 240px; height: 160px;
+      background: #000;
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin: 0 auto 24px;
+      position: relative;
+      border: 2px solid var(--border);
+    }
+    .preview-wrap video { width: 100%; height: 100%; object-fit: cover; }
+    .preview-wrap .avatar-preview {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #1a1e2a, #0d0f14);
+      font-size: 3rem; font-weight: 700; color: var(--accent);
+    }
+    .preview-controls {
+      display: flex; justify-content: center; gap: 12px; margin-bottom: 24px;
+    }
+    .preview-btn {
+      width: 40px; height: 40px; border-radius: 50%;
+      border: 1px solid var(--border); background: var(--bg-secondary);
+      color: var(--text-primary); font-size: 1rem;
+      cursor: pointer; transition: background var(--transition);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .preview-btn:hover { background: rgba(255,255,255,0.1); }
+    .preview-btn.off { background: var(--danger); border-color: var(--danger); }
+
+    /* Status area */
+    .lobby-status {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .status-ring {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      animation: spin 1.2s linear infinite;
+      margin-bottom: 4px;
+    }
+    .status-ring.admitted { border-color: var(--success); animation: none; }
+    .status-ring.declined { border-color: var(--danger); animation: none; }
+    .status-ring.waiting-host { border-top-color: var(--warning); }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .status-icon-center {
+      position: absolute;
+      inset: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 1.8rem;
+    }
+    .ring-wrap { position: relative; width: 72px; height: 72px; margin: 0 auto 8px; }
+
+    .lobby-heading { font-size: 1.3rem; font-weight: 700; margin-bottom: 6px; }
+    .lobby-sub { font-size: 0.88rem; color: var(--text-secondary); margin: 0; }
+
+    .meeting-name-chip {
+      background: var(--accent-dim);
+      border: 1px solid var(--border-accent);
+      color: var(--accent);
+      border-radius: 999px;
+      padding: 4px 14px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .dot-pulse {
+      display: flex; gap: 5px; margin-top: 8px; justify-content: center;
+    }
+    .dot-pulse span {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent); opacity: 0.3;
+      animation: dotpulse 1.4s infinite ease-in-out;
+    }
+    .dot-pulse span:nth-child(2) { animation-delay: 0.2s; }
+    .dot-pulse span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes dotpulse { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1)} }
+
+    .admitted-icon { font-size: 2.5rem; animation: popIn .4s cubic-bezier(.34,1.56,.64,1); }
+    @keyframes popIn { from{transform:scale(0);opacity:0} to{transform:scale(1);opacity:1} }
+
+    #leaveBtn { margin-top: 16px; }
+  </style>
+</head>
+<body>
+
+<div class="lobby-wrap">
+  <div class="lobby-logo">Meet<span>AI</span></div>
+
+  <div class="lobby-card">
+    <!-- Camera preview -->
+    <div class="preview-wrap">
+      <video id="previewVideo" autoplay playsinline muted></video>
+      <div class="avatar-preview" id="previewAvatar" style="display:none;"></div>
+    </div>
+    <div class="preview-controls">
+      <button class="preview-btn" id="micToggle" onclick="toggleMic()" title="Toggle mic">🎤</button>
+      <button class="preview-btn" id="camToggle" onclick="toggleCam()" title="Toggle camera">📷</button>
+    </div>
+
+    <!-- Status -->
+    <div class="lobby-status" id="lobbyStatus">
+      <!-- Filled by JS -->
+    </div>
+
+    <button class="btn btn-ghost btn-sm" id="leaveBtn" onclick="window.location.href='dashboard.html'" style="margin-top:20px;">← Leave</button>
+  </div>
+</div>
+
+<!-- Spinner -->
+<div class="spinner-overlay" id="authSpinner" style="display:none;"><div class="spinner"></div></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script>
+let meetingId    = null;
+let currentUser  = null;
+let localStream  = null;
+let micOn        = true;
+let camOn        = true;
+let requestRef   = null;
+let statusUnsubscribe = null;
+
+// ── Init ──────────────────────────────────────────────────
+onAuthReady(async user => {
+  hideAuthSpinner();
+  if (!user) {
+    window.location.href = "index.html?next=" + encodeURIComponent(location.href);
+    return;
+  }
+  currentUser = user;
+
+  const params = new URLSearchParams(window.location.search);
+  meetingId = params.get("id");
+  if (!meetingId) { window.location.href = "dashboard.html"; return; }
+
+  // Check meeting exists
+  const snap = await firestore.collection("meetings").doc(meetingId).get();
+  if (!snap.exists) {
+    setStatus("error", "Meeting not found", "The meeting ID is invalid or it has been deleted.");
+    return;
+  }
+
+  const data = snap.data();
+
+  // Host goes straight to meeting room
+  if (data.hostId === user.uid) {
+    window.location.href = `meeting.html?id=${meetingId}`;
+    return;
+  }
+
+  // If meeting has ended
+  if (data.status === "ended") {
+    setStatus("declined", "Meeting ended", "This meeting has already ended.");
+    return;
+  }
+
+  // Start camera preview
+  await startPreview();
+
+  // Place join request and wait for host approval
+  await placeJoinRequest(data.name || "Meeting", user);
+});
+
+// ── Camera preview ────────────────────────────────────────
+async function startPreview() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    document.getElementById("previewVideo").srcObject = localStream;
+  } catch (_) {
+    // No camera — show avatar
+    camOn = false;
+    document.getElementById("previewVideo").style.display = "none";
+    document.getElementById("previewAvatar").style.display = "flex";
+    document.getElementById("previewAvatar").textContent = getInitials(currentUser.displayName);
+    document.getElementById("camToggle").classList.add("off");
+  }
+}
+
+function toggleMic() {
+  micOn = !micOn;
+  if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = micOn);
+  const btn = document.getElementById("micToggle");
+  btn.textContent = micOn ? "🎤" : "🔇";
+  btn.classList.toggle("off", !micOn);
+}
+
+function toggleCam() {
+  camOn = !camOn;
+  if (localStream) localStream.getVideoTracks().forEach(t => t.enabled = camOn);
+  const vidEl  = document.getElementById("previewVideo");
+  const avatar = document.getElementById("previewAvatar");
+  vidEl.style.display    = camOn ? "block" : "none";
+  avatar.style.display   = camOn ? "none"  : "flex";
+  avatar.textContent     = getInitials(currentUser.displayName);
+  const btn = document.getElementById("camToggle");
+  btn.textContent = camOn ? "📷" : "📷🚫";
+  btn.classList.toggle("off", !camOn);
+}
+
+// ── Join Request ──────────────────────────────────────────
+async function placeJoinRequest(meetingName, user) {
+  requestRef = db.ref(`joinRequests/${meetingId}/${user.uid}`);
+
+  // Write the request
+  await requestRef.set({
+    uid:         user.uid,
+    displayName: user.displayName || "Guest",
+    photoURL:    user.photoURL    || "",
+    requestedAt: firebase.database.ServerValue.TIMESTAMP,
+    status:      "pending"
+  });
+
+  // Clean up on page close
+  requestRef.onDisconnect().remove();
+
+  // Show waiting UI
+  showWaitingStatus(meetingName);
+
+  // Watch for host response
+  requestRef.on("value", snap => {
+    const data = snap.val();
+    if (!data) return;
+
+    if (data.status === "admitted") {
+      showAdmittedStatus();
+      // Stop preview tracks before entering meeting
+      if (localStream) localStream.getTracks().forEach(t => t.stop());
+      setTimeout(() => {
+        window.location.href = `meeting.html?id=${meetingId}`;
+      }, 1800);
+    } else if (data.status === "declined") {
+      showDeclinedStatus();
+      requestRef.remove();
+    }
+  });
+
+  // Also watch if host has not joined yet (no presence)
+  const hostPresenceRef = db.ref(`presence/${meetingId}`);
+  hostPresenceRef.once("value", snap => {
+    if (!snap.exists() || !snap.val()) {
+      showWaitingForHostStatus(meetingName);
+    }
+  });
+  hostPresenceRef.on("child_added", () => {
+    // Host (or someone) joined — re-show normal waiting if we're still pending
+    requestRef.once("value", snap => {
+      if (snap.val()?.status === "pending") showWaitingStatus(meetingName);
+    });
+  });
+}
+
+// ── Status UI ─────────────────────────────────────────────
+function showWaitingStatus(meetingName) {
+  document.getElementById("lobbyStatus").innerHTML = `
+    <span class="meeting-name-chip">📅 ${escapeHtml(meetingName)}</span>
+    <div class="ring-wrap"><div class="status-ring"></div></div>
+    <div>
+      <div class="lobby-heading">Waiting to be admitted</div>
+      <p class="lobby-sub">The host has been notified you're here.</p>
+      <div class="dot-pulse"><span></span><span></span><span></span></div>
+    </div>
+  `;
+}
+
+function showWaitingForHostStatus(meetingName) {
+  document.getElementById("lobbyStatus").innerHTML = `
+    <span class="meeting-name-chip">📅 ${escapeHtml(meetingName)}</span>
+    <div class="ring-wrap"><div class="status-ring waiting-host"></div></div>
+    <div>
+      <div class="lobby-heading">Waiting for the host</div>
+      <p class="lobby-sub">The host hasn't started the meeting yet.<br>You'll be let in automatically.</p>
+      <div class="dot-pulse"><span></span><span></span><span></span></div>
+    </div>
+  `;
+}
+
+function showAdmittedStatus() {
+  document.getElementById("lobbyStatus").innerHTML = `
+    <div class="admitted-icon">✅</div>
+    <div>
+      <div class="lobby-heading" style="color:var(--success)">You've been admitted!</div>
+      <p class="lobby-sub">Joining the meeting now…</p>
+    </div>
+  `;
+}
+
+function showDeclinedStatus() {
+  document.getElementById("lobbyStatus").innerHTML = `
+    <div class="admitted-icon">❌</div>
+    <div>
+      <div class="lobby-heading" style="color:var(--danger)">Request declined</div>
+      <p class="lobby-sub">The host didn't let you in this time.</p>
+    </div>
+  `;
+  document.getElementById("leaveBtn").textContent = "← Back to Dashboard";
+}
+
+function setStatus(type, heading, sub) {
+  const icons = { error: "⚠️", declined: "❌", admitted: "✅" };
+  document.getElementById("lobbyStatus").innerHTML = `
+    <div class="admitted-icon">${icons[type] || "ℹ️"}</div>
+    <div>
+      <div class="lobby-heading">${escapeHtml(heading)}</div>
+      <p class="lobby-sub">${escapeHtml(sub)}</p>
+    </div>
+  `;
+}
+
+function escapeHtml(s) {
+  return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+</script>
+</body>
+</html>
