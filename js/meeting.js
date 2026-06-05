@@ -15,6 +15,189 @@ let aiToolsVisible = true;
 let meetingData    = {};
 let participants   = {};
 let aiLastResponse = "";
+let recorder       = null;
+let remoteStreams   = new Map(); // peerId -> MediaStream (for audio mixing)
+
+// ============================================================
+//  MEETING RECORDER — composite canvas + Web Audio mixer
+// ============================================================
+class MeetingRecorder {
+  constructor() {
+    this.mediaRecorder  = null;
+    this.chunks         = [];
+    this.isRecording    = false;
+    this.canvas         = document.createElement("canvas");
+    this.canvas.width   = 1280;
+    this.canvas.height  = 720;
+    this.ctx            = this.canvas.getContext("2d");
+    this.audioCtx       = null;
+    this.dest           = null;
+    this.animId         = null;
+    this.audioSources   = new Map();
+  }
+
+  start(localStream, remoteStreamMap) {
+    // ── Web Audio context for mixing all participants ────────
+    this.audioCtx = new AudioContext();
+    this.dest     = this.audioCtx.createMediaStreamDestination();
+
+    if (localStream)  this._addAudio(localStream, "local");
+    remoteStreamMap.forEach((stream, uid) => this._addAudio(stream, uid));
+
+    // ── Start canvas draw loop ───────────────────────────────
+    this._drawLoop();
+
+    // ── Combine canvas video + mixed audio ──────────────────
+    const videoTrack  = this.canvas.captureStream(30).getVideoTracks()[0];
+    const audioTracks = this.dest.stream.getAudioTracks();
+    const combined    = new MediaStream(audioTracks.length
+      ? [videoTrack, audioTracks[0]]
+      : [videoTrack]);
+
+    const mimeType = [
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm"
+    ].find(t => MediaRecorder.isTypeSupported(t)) || "video/webm";
+
+    this.chunks        = [];
+    this.mediaRecorder = new MediaRecorder(combined, {
+      mimeType,
+      videoBitsPerSecond: 2_500_000
+    });
+    this.mediaRecorder.ondataavailable = e => {
+      if (e.data && e.data.size > 0) this.chunks.push(e.data);
+    };
+    this.mediaRecorder.start(1000);
+    this.isRecording = true;
+    return true;
+  }
+
+  _addAudio(stream, id) {
+    if (!this.audioCtx || !stream) return;
+    const tracks = stream.getAudioTracks();
+    if (!tracks.length) return;
+    try {
+      const src = this.audioCtx.createMediaStreamSource(new MediaStream(tracks));
+      src.connect(this.dest);
+      this.audioSources.set(id, src);
+    } catch (_) {}
+  }
+
+  addRemoteStream(uid, stream) {
+    if (this.isRecording) this._addAudio(stream, uid);
+  }
+
+  _drawLoop() {
+    this._drawFrame();
+    this.animId = requestAnimationFrame(() => this._drawLoop());
+  }
+
+  _drawFrame() {
+    const W = 1280, H = 720;
+    const ctx = this.ctx;
+
+    // Background
+    ctx.fillStyle = "#0d0f14";
+    ctx.fillRect(0, 0, W, H);
+
+    // Collect participant tiles
+    const tiles = [...document.querySelectorAll("#participantGrid .participant-tile")];
+    const count = tiles.length || 1;
+    const cols  = count === 1 ? 1 : count <= 2 ? 2 : count <= 4 ? 2 : 3;
+    const rows  = Math.ceil(count / cols);
+    const tw    = W / cols;
+    const th    = H / rows;
+
+    tiles.forEach((tile, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x   = col * tw;
+      const y   = row * th;
+
+      // Tile background
+      ctx.fillStyle = "#1a1e2a";
+      ctx.fillRect(x, y, tw, th);
+
+      const vid = tile.querySelector("video");
+      if (vid && vid.readyState >= 2 && vid.videoWidth > 0) {
+        // Cover-fit the video into the tile slot
+        const vw    = vid.videoWidth;
+        const vh    = vid.videoHeight;
+        const scale = Math.max(tw / vw, th / vh);
+        const dw    = vw * scale;
+        const dh    = vh * scale;
+        const dx    = x + (tw - dw) / 2;
+        const dy    = y + (th - dh) / 2;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, tw, th);
+        ctx.clip();
+        ctx.drawImage(vid, dx, dy, dw, dh);
+        ctx.restore();
+      }
+
+      // Name label
+      const nameEl = tile.querySelector(".tile-name");
+      if (nameEl) {
+        const name = nameEl.textContent.trim();
+        ctx.font      = "bold 14px Inter, sans-serif";
+        const textW   = ctx.measureText(name).width;
+        const padX    = 12, padY = 6, radius = 8;
+        const lx      = x + 10;
+        const ly      = y + th - 36;
+        const lw      = textW + padX * 2;
+        const lh      = 26;
+
+        ctx.fillStyle = "rgba(0,0,0,0.62)";
+        ctx.beginPath();
+        ctx.moveTo(lx + radius, ly);
+        ctx.lineTo(lx + lw - radius, ly);
+        ctx.quadraticCurveTo(lx + lw, ly, lx + lw, ly + radius);
+        ctx.lineTo(lx + lw, ly + lh - radius);
+        ctx.quadraticCurveTo(lx + lw, ly + lh, lx + lw - radius, ly + lh);
+        ctx.lineTo(lx + radius, ly + lh);
+        ctx.quadraticCurveTo(lx, ly + lh, lx, ly + lh - radius);
+        ctx.lineTo(lx, ly + radius);
+        ctx.quadraticCurveTo(lx, ly, lx + radius, ly);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(name, lx + padX, ly + lh - padY);
+      }
+    });
+
+    // REC indicator (top-right)
+    const now = Date.now();
+    if (Math.floor(now / 700) % 2 === 0) {
+      ctx.fillStyle = "#ef4444";
+      ctx.beginPath();
+      ctx.arc(W - 36, 22, 8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 13px Inter, sans-serif";
+    ctx.fillText("REC", W - 24, 27);
+  }
+
+  stop() {
+    return new Promise(resolve => {
+      if (!this.mediaRecorder || this.mediaRecorder.state === "inactive") {
+        resolve(null);
+        return;
+      }
+      this.mediaRecorder.onstop = () => {
+        if (this.animId) cancelAnimationFrame(this.animId);
+        if (this.audioCtx) this.audioCtx.close().catch(() => {});
+        const blob = new Blob(this.chunks, { type: "video/webm" });
+        this.isRecording = false;
+        resolve(blob);
+      };
+      this.mediaRecorder.stop();
+    });
+  }
+}
 
 // ── Bootstrap ──────────────────────────────────────────────
 async function initMeeting() {
@@ -107,6 +290,9 @@ function attachLocalStream(stream) {
 
 // ── Remote streams ─────────────────────────────────────────
 function onRemoteStream(peerId, stream) {
+  remoteStreams.set(peerId, stream);
+  if (recorder && recorder.isRecording) recorder.addRemoteStream(peerId, stream);
+
   db.ref(`presence/${meetingId}/${peerId}`).once("value", snap => {
     const data = snap.val() || {};
     participants[peerId] = data;
@@ -116,6 +302,7 @@ function onRemoteStream(peerId, stream) {
 }
 
 function onPeerLeft(peerId) {
+  remoteStreams.delete(peerId);
   removeParticipantTile(peerId);
   delete participants[peerId];
   updateParticipantCount();
@@ -425,8 +612,10 @@ function updateVideoBtn() {
 
 // ── Host controls ──────────────────────────────────────────
 function updateHostControls() {
-  const panel = document.getElementById("hostControls");
-  if (panel) panel.style.display = isHost ? "flex" : "none";
+  const panel   = document.getElementById("hostControls");
+  const recBtn  = document.getElementById("recordBtn");
+  if (panel)  panel.style.display  = isHost ? "flex"  : "none";
+  if (recBtn) recBtn.style.display = isHost ? "flex"  : "none";
 }
 
 function toggleAIToolsVisibility() {
@@ -440,6 +629,67 @@ function toggleAIToolsVisibility() {
   firestore.collection("meetings").doc(meetingId).update({ aiToolsHidden: !aiToolsVisible }).catch(() => {});
 }
 
+// ── Recording ──────────────────────────────────────────────
+function toggleRecording() {
+  if (!recorder || !recorder.isRecording) {
+    startRecording();
+  } else {
+    stopRecordingAndSave();
+  }
+}
+
+function startRecording() {
+  if (!isHost) return;
+  if (!webrtc?.localStream) { showToast("⚠️ Camera/mic not ready yet."); return; }
+
+  recorder = new MeetingRecorder();
+  const started = recorder.start(webrtc.localStream, remoteStreams);
+  if (!started) { showToast("⚠️ Recording not supported in this browser."); return; }
+
+  const btn = document.getElementById("recordBtn");
+  if (btn) {
+    btn.classList.add("recording");
+    btn.title = "Stop Recording";
+    const label = btn.closest("[data-rec-wrap]")?.querySelector(".control-btn-label");
+    if (label) label.textContent = "Stop Rec";
+  }
+  showToast("🔴 Recording started");
+}
+
+async function stopRecordingAndSave() {
+  if (!recorder) return null;
+  const blob = await recorder.stop();
+  recorder   = null;
+
+  const btn = document.getElementById("recordBtn");
+  if (btn) {
+    btn.classList.remove("recording");
+    btn.title = "Start Recording";
+    const label = btn.closest("[data-rec-wrap]")?.querySelector(".control-btn-label");
+    if (label) label.textContent = "Record";
+  }
+
+  if (blob && blob.size > 0) {
+    showToast("⏹ Recording stopped");
+    return blob;
+  }
+  return null;
+}
+
+function _downloadRecording(blob) {
+  const name = (meetingData.name || "meeting").replace(/\s+/g, "-").toLowerCase();
+  const ts   = new Date().toISOString().slice(0,19).replace(/:/g,"-");
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement("a"), {
+    href:     url,
+    download: `${name}_${ts}.webm`
+  });
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
 // ── WAITING ROOM — Host: listen for join requests ──────────
 function listenForJoinRequests() {
   const reqRef = db.ref(`joinRequests/${meetingId}`);
@@ -448,19 +698,15 @@ function listenForJoinRequests() {
     if (!data || data.status !== "pending") return;
     showAdmissionRequest(snap.key, data);
   });
-  // Handle late-arrivals that were pending before host joined
   reqRef.orderByChild("status").equalTo("pending").once("value", snap => {
     snap.forEach(child => showAdmissionRequest(child.key, child.val()));
   });
 }
 
 function showAdmissionRequest(uid, data) {
-  // Don't show duplicate cards
   if (document.getElementById(`req-${uid}`)) return;
-
   const container = document.getElementById("admissionQueue");
   if (!container) return;
-
   const card = document.createElement("div");
   card.id        = `req-${uid}`;
   card.className = "admission-card";
@@ -504,6 +750,8 @@ function _hideQueueIfEmpty() {
 // ── Leave / End ────────────────────────────────────────────
 async function leaveMeeting() {
   if (!confirm("Leave this meeting?")) return;
+  // Stop recording silently if it was running
+  if (recorder && recorder.isRecording) await recorder.stop();
   await _cleanup();
   window.location.href = "dashboard.html";
 }
@@ -511,9 +759,73 @@ async function leaveMeeting() {
 async function endMeeting() {
   if (!isHost) return;
   if (!confirm("End this meeting for everyone?")) return;
+
+  // ── Ask about recording download if recording was started ──
+  let recordingBlob = null;
+  if (recorder && recorder.isRecording) {
+    recordingBlob = await stopRecordingAndSave();
+  }
+
+  if (recordingBlob) {
+    _showDownloadDialog(recordingBlob, async () => {
+      await _finishEndMeeting();
+    });
+    return;
+  }
+
+  await _finishEndMeeting();
+}
+
+function _showDownloadDialog(blob, afterCallback) {
+  // Build modal overlay
+  const overlay = document.createElement("div");
+  overlay.id = "recDownloadOverlay";
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:1000;
+    background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);
+    display:flex;align-items:center;justify-content:center;
+  `;
+  overlay.innerHTML = `
+    <div style="
+      background:var(--bg-card);
+      border:1px solid var(--border-accent);
+      border-radius:var(--radius-lg);
+      padding:36px 32px;
+      max-width:420px;width:90%;
+      text-align:center;
+      box-shadow:0 24px 64px rgba(0,0,0,0.6);
+    ">
+      <div style="font-size:2.5rem;margin-bottom:12px;">🎥</div>
+      <h2 style="margin-bottom:8px;font-size:1.2rem;">Save Your Recording?</h2>
+      <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:28px;line-height:1.55;">
+        You recorded this meeting. Would you like to download it as a <strong>.webm</strong> video file before ending?
+      </p>
+      <div style="display:flex;gap:12px;justify-content:center;">
+        <button id="recDownloadYes" class="btn btn-primary" style="min-width:130px;">
+          ⬇️ Yes, Download
+        </button>
+        <button id="recDownloadNo" class="btn btn-ghost" style="min-width:130px;">
+          No, End Without
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  document.getElementById("recDownloadYes").onclick = async () => {
+    _downloadRecording(blob);
+    overlay.remove();
+    await afterCallback();
+  };
+  document.getElementById("recDownloadNo").onclick = async () => {
+    overlay.remove();
+    await afterCallback();
+  };
+}
+
+async function _finishEndMeeting() {
   await triggerSummarize();
   if (transcription) await _persistTranscript(transcription.getFullText());
-  // Decline all pending requests
   db.ref(`joinRequests/${meetingId}`).remove();
   await firestore.collection("meetings").doc(meetingId).update({
     status: "ended", endedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -570,17 +882,15 @@ function _downloadText(text, filename) {
 }
 
 function _getTimestamp() { return new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}); }
-function escapeHtml(s)   { return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
-function _markdownToHtml(escaped) {
-  return escaped
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.*?)\*/g,     "<em>$1</em>")
-    .replace(/^##\s(.+)$/gm,  "<h4 style='margin:6px 0 2px;color:var(--accent)'>$1</h4>")
-    .replace(/^#\s(.+)$/gm,   "<h3 style='margin:8px 0 4px;'>$1</h3>")
-    .replace(/^- (.+)$/gm,    "<li style='margin-left:14px;list-style:disc;'>$1</li>")
-    .replace(/\n/g, "<br>");
+function escapeHtml(str) {
+  return (str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
-window.addEventListener("DOMContentLoaded", initMeeting);
-window.addEventListener("beforeunload", () => { webrtc?.leave(); });
+function _markdownToHtml(text) {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.*?)\*/g, "<em>$1</em>")
+    .replace(/`(.*?)`/g, "<code>$1</code>")
+    .replace(/\n/g, "<br>");
+}
