@@ -476,6 +476,24 @@
 }
 .ai-input-row .input { flex: 1; }
 
+/* ── Record button ───────────────────────────────────────── */
+#recordBtn {
+  background: var(--bg-card);
+  color:       var(--text-primary);
+  font-size:   1.2rem;
+}
+#recordBtn.recording {
+  background:  var(--danger);
+  color:       #fff;
+  animation:   rec-pulse 1.4s infinite;
+  box-shadow:  0 0 0 0 rgba(239,68,68,0.5);
+}
+@keyframes rec-pulse {
+  0%   { box-shadow: 0 0 0 0   rgba(239,68,68,0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(239,68,68,0);   }
+  100% { box-shadow: 0 0 0 0   rgba(239,68,68,0);    }
+}
+
 /* ── Admission Queue (host waiting room panel) ───────────── */
 #admissionQueue {
   flex-direction: column;
