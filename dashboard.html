@@ -13,17 +13,12 @@
     .dash-sidebar { display: flex; flex-direction: column; gap: 20px; }
     .dash-main { display: flex; flex-direction: column; gap: 24px; }
 
-    /* Quick action cards */
     .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .action-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 24px 20px;
-      cursor: pointer;
-      transition: all var(--transition);
-      text-align: center;
-      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 24px 20px;
+      cursor: pointer; transition: all var(--transition);
+      text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px;
     }
     .action-card:hover { border-color: var(--border-accent); background: rgba(108,99,255,0.06); transform: translateY(-2px); }
     .action-card.primary { background: var(--accent); border-color: transparent; }
@@ -33,11 +28,9 @@
     .action-card p { font-size: 0.78rem; margin: 0; }
     .action-card.primary p, .action-card.primary h3 { color: rgba(255,255,255,0.85); }
 
-    /* Join form */
     .join-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; }
     .join-card h3 { margin-bottom: 16px; font-size: 1rem; }
 
-    /* Modal overlay */
     .modal-overlay {
       position: fixed; inset: 0; z-index: 300;
       background: rgba(0,0,0,0.65); backdrop-filter: blur(6px);
@@ -49,7 +42,6 @@
     .modal h2 { margin-bottom: 6px; }
     .modal .sub { margin-bottom: 24px; font-size: 0.88rem; }
 
-    /* Meeting history */
     .meetings-grid { display: flex; flex-direction: column; gap: 10px; }
     .empty-state {
       padding: 48px; text-align: center;
@@ -58,16 +50,12 @@
     }
     .empty-state .es-icon { font-size: 2.5rem; margin-bottom: 12px; }
 
-    /* Profile card */
     .profile-card {
       background: var(--bg-card); border: 1px solid var(--border);
       border-radius: var(--radius-lg); padding: 20px;
       display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;
     }
-    .profile-avatar {
-      width: 64px; height: 64px; border-radius: 50%;
-      object-fit: cover; border: 2px solid var(--border-accent);
-    }
+    .profile-avatar { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border-accent); }
     .profile-avatar-fallback {
       width: 64px; height: 64px; border-radius: 50%;
       background: var(--accent); color: #fff;
@@ -78,17 +66,14 @@
     .profile-name { font-weight: 700; font-size: 1rem; }
     .profile-email { font-size: 0.78rem; color: var(--text-muted); }
 
-    /* Stats */
     .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
     .stat-chip {
       background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 14px;
-      text-align: center;
+      border-radius: var(--radius); padding: 14px; text-align: center;
     }
     .stat-chip .stat-num { font-size: 1.4rem; font-weight: 700; color: var(--accent); }
     .stat-chip .stat-label { font-size: 0.72rem; color: var(--text-muted); }
 
-    /* Device test */
     .device-test-card {
       background: var(--bg-card); border: 1px solid var(--border);
       border-radius: var(--radius-lg); padding: 20px;
@@ -101,20 +86,13 @@
     .dot-warn { display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning); }
     .dot-err  { display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger); }
 
-    @media (max-width: 900px) {
-      .dash-body { grid-template-columns: 1fr; }
-      .dash-sidebar { order: 2; }
-    }
-    @media (max-width: 560px) {
-      .quick-actions { grid-template-columns: 1fr; }
-      .stats-row { grid-template-columns: repeat(3, 1fr); }
-    }
+    @media (max-width: 900px) { .dash-body { grid-template-columns: 1fr; } .dash-sidebar { order: 2; } }
+    @media (max-width: 560px) { .quick-actions { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
 <div class="dash-layout">
 
-  <!-- Header -->
   <header class="site-header">
     <div class="logo">Meet<span>AI</span></div>
     <nav class="header-nav">
@@ -126,12 +104,8 @@
     </nav>
   </header>
 
-  <!-- Body -->
   <div class="dash-body">
-
-    <!-- Sidebar -->
     <aside class="dash-sidebar">
-      <!-- Profile -->
       <div class="profile-card">
         <div id="profileAvatarWrap">
           <div class="profile-avatar-fallback" id="profileAvatarFallback">?</div>
@@ -141,23 +115,12 @@
         <div class="badge badge-accent">Free Plan</div>
       </div>
 
-      <!-- Stats -->
       <div class="stats-row">
-        <div class="stat-chip">
-          <div class="stat-num" id="statMeetings">0</div>
-          <div class="stat-label">Meetings</div>
-        </div>
-        <div class="stat-chip">
-          <div class="stat-num" id="statHours">0</div>
-          <div class="stat-label">Hours</div>
-        </div>
-        <div class="stat-chip">
-          <div class="stat-num" id="statNotes">0</div>
-          <div class="stat-label">Summaries</div>
-        </div>
+        <div class="stat-chip"><div class="stat-num" id="statMeetings">0</div><div class="stat-label">Meetings</div></div>
+        <div class="stat-chip"><div class="stat-num" id="statHours">0</div><div class="stat-label">Hours</div></div>
+        <div class="stat-chip"><div class="stat-num" id="statNotes">0</div><div class="stat-label">Summaries</div></div>
       </div>
 
-      <!-- Device test -->
       <div class="device-test-card">
         <h3>🔧 Device Check</h3>
         <div class="device-row"><span>Camera</span><span class="device-status" id="camStatus">Checking…</span></div>
@@ -166,7 +129,6 @@
         <div class="device-row"><span>Browser</span><span class="device-status" id="browserStatus">Checking…</span></div>
       </div>
 
-      <!-- Join a meeting -->
       <div class="join-card">
         <h3>Join a Meeting</h3>
         <div class="input-group">
@@ -177,14 +139,12 @@
       </div>
     </aside>
 
-    <!-- Main -->
     <main class="dash-main">
       <div>
         <h1>Good <span id="greeting">day</span>, <span id="firstName">there</span> 👋</h1>
         <p>Ready for your next meeting? Start or schedule in one click.</p>
       </div>
 
-      <!-- Quick actions -->
       <div class="quick-actions">
         <div class="action-card primary" onclick="createInstantMeeting()">
           <div class="action-icon">🚀</div>
@@ -198,7 +158,6 @@
         </div>
       </div>
 
-      <!-- Past meetings -->
       <div>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
           <h2 style="font-size:1.1rem;">Recent Meetings</h2>
@@ -235,14 +194,13 @@
         </label>
       </div>
       <div class="form-actions">
-        <button class="btn btn-primary" type="submit">Create & Start</button>
+        <button class="btn btn-primary" type="submit">Create &amp; Start</button>
         <button class="btn btn-ghost" type="button" onclick="closeModal('createModal')">Cancel</button>
       </div>
     </form>
   </div>
 </div>
 
-<!-- Spinner -->
 <div class="spinner-overlay" id="authSpinner" style="display:none;"><div class="spinner"></div></div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -269,8 +227,8 @@ function populateUserUI(user) {
   const first = name.split(" ")[0];
   const init  = getInitials(name);
   const hr    = new Date().getHours();
-  document.getElementById("greeting").textContent = hr < 12 ? "morning" : hr < 17 ? "afternoon" : "evening";
-  document.getElementById("firstName").textContent = first;
+  document.getElementById("greeting").textContent   = hr < 12 ? "morning" : hr < 17 ? "afternoon" : "evening";
+  document.getElementById("firstName").textContent  = first;
   document.getElementById("headerName").textContent = name;
   document.getElementById("profileName").textContent = name;
   document.getElementById("profileEmail").textContent = email;
@@ -282,47 +240,49 @@ function populateUserUI(user) {
   }
 }
 
+// ── Load meetings from Realtime Database ──────────────────
 async function loadMeetings(uid) {
   try {
-    const snap = await firestore.collection("meetings")
-      .where("hostId", "==", uid)
-      .orderBy("createdAt", "desc")
-      .limit(20)
-      .get();
+    const snap = await db.ref("meetings").orderByChild("hostId").equalTo(uid).once("value");
     const list = document.getElementById("meetingsList");
-    if (snap.empty) return;
+    if (!snap.exists()) return;
+
+    const meetings = [];
+    snap.forEach(child => meetings.push({ id: child.key, ...child.val() }));
+    meetings.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    meetings.splice(20); // keep latest 20
+
     list.innerHTML = "";
     document.getElementById("meetingCount").style.display = "inline-flex";
-    document.getElementById("meetingCount").textContent = snap.size;
-    document.getElementById("statMeetings").textContent = snap.size;
-    snap.forEach(doc => {
-      const d = doc.data();
+    document.getElementById("meetingCount").textContent   = meetings.length;
+    document.getElementById("statMeetings").textContent   = meetings.length;
+
+    meetings.forEach(d => {
       const card = document.createElement("div");
       card.className = "meeting-card";
-      const date = d.createdAt ? new Date(d.createdAt.toMillis()).toLocaleString() : "—";
-      const status = d.status === "ended" ? `<span class="badge" style="background:rgba(239,68,68,.1);color:#f87171;">Ended</span>` : `<span class="badge badge-success">Active</span>`;
+      const date   = d.createdAt ? new Date(d.createdAt).toLocaleString() : "—";
+      const status = d.status === "ended"
+        ? `<span class="badge" style="background:rgba(239,68,68,.1);color:#f87171;">Ended</span>`
+        : `<span class="badge badge-success">Active</span>`;
       card.innerHTML = `
         <div class="meeting-card-info">
           <h3>${escapeHtml(d.name || "Untitled Meeting")}</h3>
-          <p>${date} &nbsp;·&nbsp; ID: ${doc.id}</p>
+          <p>${date} &nbsp;·&nbsp; ID: ${d.id}</p>
         </div>
         <div class="meeting-card-actions">
           ${status}
-          ${d.status !== "ended" ? `<button class="btn btn-primary btn-sm" onclick="goToMeeting('${doc.id}')">Rejoin</button>` : ""}
-          <button class="btn btn-ghost btn-sm" onclick="copyId('${doc.id}')">Copy ID</button>
+          ${d.status !== "ended" ? `<button class="btn btn-primary btn-sm" onclick="goToMeeting('${d.id}')">Rejoin</button>` : ""}
+          <button class="btn btn-ghost btn-sm" onclick="copyId('${d.id}')">Copy ID</button>
         </div>
       `;
       list.appendChild(card);
     });
   } catch (err) {
     console.error("loadMeetings:", err);
-    if (err.code === "failed-precondition") {
-      document.getElementById("meetingsList").innerHTML =
-        `<div class="empty-state"><div class="es-icon">⚠️</div><p>Firestore index needed. Check browser console for a link to create it, then reload.</p></div>`;
-    }
   }
 }
 
+// ── Create meeting ─────────────────────────────────────────
 async function createInstantMeeting() {
   document.getElementById("meetingName").value = "Instant Meeting " + new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
   openModal("createModal");
@@ -339,70 +299,63 @@ async function confirmCreateMeeting(e) {
   const name = document.getElementById("meetingName").value.trim() || "Untitled Meeting";
   showAuthSpinner();
   try {
-    const id      = generateMeetingId();
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Request timed out. Check your internet connection and try again.")), 10000)
-    );
-    await Promise.race([
-      firestore.collection("meetings").doc(id).set({
-        name,
-        hostId:       user.uid,
-        hostName:     user.displayName || "Host",
-        status:       "active",
-        createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
-        participants: [user.uid],
-        transcript:   "",
-        allowGuests:  document.getElementById("allowGuests").checked
-      }),
-      timeout
-    ]);
+    const id = generateMeetingId();
+    // Write to Realtime Database — no Firestore dependency
+    await db.ref("meetings/" + id).set({
+      name,
+      hostId:      user.uid,
+      hostName:    user.displayName || "Host",
+      status:      "active",
+      createdAt:   firebase.database.ServerValue.TIMESTAMP,
+      allowGuests: document.getElementById("allowGuests").checked,
+      transcript:  ""
+    });
+    // Also store current user as first participant
+    await db.ref("meetings/" + id + "/participants/" + user.uid).set(true);
     hideAuthSpinner();
     closeModal("createModal");
-    window.location.href = `meeting.html?id=${id}`;
+    window.location.href = "meeting.html?id=" + id;
   } catch (err) {
     hideAuthSpinner();
     alert("Failed to create meeting: " + err.message);
   }
 }
 
+// ── Join / Go to meeting ───────────────────────────────────
 function joinMeeting() {
   const id = document.getElementById("joinInput").value.trim();
   if (!id) { document.getElementById("joinInput").focus(); return; }
-  // Host goes direct; guests go through the waiting room
-  window.location.href = `lobby.html?id=${id}`;
+  window.location.href = "lobby.html?id=" + id;
 }
+
 function goToMeeting(id) {
-  // Rejoining — host goes direct, guests go to lobby
   const user = auth.currentUser;
-  firestore.collection("meetings").doc(id).get().then(snap => {
-    if (!snap.exists) return;
-    const isHost = snap.data().hostId === user?.uid;
-    window.location.href = isHost ? `meeting.html?id=${id}` : `lobby.html?id=${id}`;
+  db.ref("meetings/" + id).once("value").then(snap => {
+    if (!snap.exists()) return;
+    const isHost = snap.val().hostId === user?.uid;
+    window.location.href = isHost ? "meeting.html?id=" + id : "lobby.html?id=" + id;
   });
 }
+
 function copyId(id) { navigator.clipboard.writeText(id).then(() => showToast("ID copied!")); }
 
-// Device checks
+// ── Device checks ──────────────────────────────────────────
 async function checkDevices() {
-  // Camera
   try {
     const s = await navigator.mediaDevices.getUserMedia({ video: true });
     s.getTracks().forEach(t => t.stop());
     setDeviceStatus("camStatus", "ok", "Ready");
   } catch (_) { setDeviceStatus("camStatus", "err", "No access"); }
 
-  // Mic
   try {
     const s = await navigator.mediaDevices.getUserMedia({ audio: true });
     s.getTracks().forEach(t => t.stop());
     setDeviceStatus("micStatus", "ok", "Ready");
   } catch (_) { setDeviceStatus("micStatus", "err", "No access"); }
 
-  // Speech
   const supported = ("webkitSpeechRecognition" in window || "SpeechRecognition" in window);
   setDeviceStatus("speechStatus", supported ? "ok" : "warn", supported ? "Supported" : "Not supported");
 
-  // Browser
   const isChrome = /Chrome|Chromium/i.test(navigator.userAgent);
   const isEdge   = /Edg/i.test(navigator.userAgent);
   setDeviceStatus("browserStatus", (isChrome || isEdge) ? "ok" : "warn", (isChrome || isEdge) ? "Chrome/Edge" : "Use Chrome");
