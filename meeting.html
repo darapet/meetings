@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MeetAI — Meeting</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/meeting.css">
+</head>
+<body>
+
+<div class="meeting-root">
+
+  <!-- ══ TOP BAR ═══════════════════════════════════════════ -->
+  <div class="meeting-topbar">
+    <div class="meeting-topbar-left">
+      <div class="logo" style="font-size:1.1rem;">Meet<span style="color:var(--accent)">AI</span></div>
+      <div style="width:1px;height:20px;background:var(--border);"></div>
+      <span id="meetingTitle" style="font-weight:600;font-size:0.95rem;">Loading…</span>
+      <span class="meeting-id-chip" id="meetingIdDisplay" onclick="copyMeetingLink()" title="Copy invite link">🔗 copy invite</span>
+      <span id="meetingTimer" class="meeting-timer">00:00</span>
+    </div>
+    <div class="meeting-topbar-right">
+      <span id="participantCount" class="badge badge-accent" style="margin-right:4px;">1</span>
+      <span style="font-size:0.8rem;color:var(--text-muted);margin-right:8px;">participant(s)</span>
+      <button class="btn btn-ghost btn-sm" onclick="toggleSidebar()">💬 Chat</button>
+      <button class="btn btn-ghost btn-sm" onclick="openAITerminal()">🤖 Ask AI</button>
+      <button class="btn btn-danger btn-sm" onclick="leaveMeeting()" style="margin-left:8px;">Leave</button>
+    </div>
+  </div>
+
+  <!-- ══ HOST CONTROLS STRIP ═══════════════════════════════ -->
+  <div id="hostControls">
+    <span class="host-label">👑 HOST</span>
+    <button class="btn btn-ghost btn-sm" onclick="toggleAIToolsVisibility()" id="toggleAIVisBtn">🙈 Hide AI Tools</button>
+    <button class="btn btn-danger btn-sm" onclick="endMeeting()">⏹ End Meeting</button>
+  </div>
+
+  <!-- ══ ADMISSION QUEUE (host only) ═══════════════════════ -->
+  <div id="admissionQueue" style="display:none;"></div>
+
+  <!-- ══ NOTE-TAKER BAR ════════════════════════════════════ -->
+  <div class="note-taker-bar ai-tools-panel">
+    <!-- Live Transcription -->
+    <div class="note-taker-section">
+      <div class="note-taker-header">
+        <span><span class="status-dot"></span>LIVE TRANSCRIPTION</span>
+        <span id="transcriptStatus" style="font-size:0.72rem;">Starting…</span>
+      </div>
+      <div id="transcriptContent"></div>
+      <div class="note-taker-footer">
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm btn-ghost" onclick="transcription&&transcription.pause()" title="Pause">⏸</button>
+          <button class="btn btn-sm btn-ghost" onclick="transcription&&transcription.resume()" title="Resume">▶</button>
+          <button class="btn btn-sm btn-ghost" onclick="downloadTranscript()" title="Download">⬇️ .txt</button>
+        </div>
+        <button class="btn btn-sm btn-ghost" onclick="(document.getElementById('transcriptContent').innerHTML='') && transcription&&transcription.clearText()">🗑 Clear</button>
+      </div>
+    </div>
+
+    <!-- AI Summarizer -->
+    <div class="note-taker-section">
+      <div class="note-taker-header">
+        <span>📖 AI SUMMARIZER (Mistral)</span>
+        <label class="toggle-wrap" style="gap:6px;">
+          <input type="checkbox" id="bookModeToggle">
+          <span class="toggle-track" style="width:32px;height:18px;"></span>
+          <span class="toggle-label" style="font-size:0.7rem;">Book Mode</span>
+        </label>
+      </div>
+      <div id="summaryContent" style="color:var(--text-muted);font-size:0.8rem;padding:8px 12px;">
+        Summary appears here. Click "Summarize Now" to generate, or it runs automatically every 5 min.
+      </div>
+      <div class="note-taker-footer">
+        <button class="btn btn-sm btn-primary" id="summarizeBtn" onclick="triggerSummarize()">Summarize Now</button>
+        <button class="btn btn-sm btn-ghost" onclick="downloadSummary()">⬇️ .txt</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MAIN BODY ══════════════════════════════════════════ -->
+  <div class="meeting-body">
+
+    <!-- Video area -->
+    <div class="meeting-main" id="meetingMain">
+      <div class="screen-preview-wrap" id="screenPreviewWrap">
+        <video id="screenPreview" autoplay playsinline muted></video>
+      </div>
+      <div id="participantGrid"></div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="meeting-sidebar" id="meetingSidebar">
+      <div class="sidebar-tabs">
+        <div class="sidebar-tab active" id="tab-chat"   onclick="switchSidebarTab('chat')">Chat</div>
+        <div class="sidebar-tab"        id="tab-people" onclick="switchSidebarTab('people')">People</div>
+        <div class="sidebar-tab"        id="tab-notes"  onclick="switchSidebarTab('notes')">Notes</div>
+      </div>
+
+      <div class="sidebar-pane active" id="pane-chat">
+        <div id="chatLog"></div>
+        <div class="chat-input-wrap">
+          <input class="input" id="chatInput" placeholder="Message everyone…"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage();}">
+          <button class="btn btn-primary btn-sm" onclick="sendChatMessage()">Send</button>
+        </div>
+      </div>
+
+      <div class="sidebar-pane" id="pane-people">
+        <div class="participants-list" id="participantsList"></div>
+      </div>
+
+      <div class="sidebar-pane" id="pane-notes">
+        <div style="padding:12px;flex:1;display:flex;flex-direction:column;gap:8px;overflow:hidden;">
+          <p style="font-size:0.8rem;color:var(--text-muted);margin:0;">Private notes — only visible to you.</p>
+          <textarea class="textarea" id="privateNotes" style="flex:1;resize:none;min-height:0;"
+            placeholder="Type your notes here…" oninput="savePrivateNotes()"></textarea>
+          <button class="btn btn-ghost btn-sm" onclick="downloadPrivateNotes()">⬇️ Download Notes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ CONTROL BAR ════════════════════════════════════════ -->
+  <div class="meeting-controls">
+    <div style="position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:20px;">
+      <button class="control-btn" id="toggleMicBtn" onclick="toggleAudio()" title="Mute / Unmute">🎤</button>
+      <span class="control-btn-label">Mic</span>
+    </div>
+    <div style="position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:20px;">
+      <button class="control-btn" id="toggleCamBtn" onclick="toggleVideo()" title="Camera">📷</button>
+      <span class="control-btn-label">Camera</span>
+    </div>
+    <div style="position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:20px;">
+      <button class="control-btn" id="shareScreenBtn" onclick="handleScreenShare()" title="Share Screen">🖥️</button>
+      <span class="control-btn-label">Share</span>
+    </div>
+    <div class="controls-divider"></div>
+    <div style="position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:20px;">
+      <button class="control-btn" onclick="openAITerminal()" title="AI Assistant" style="background:var(--accent-dim);color:var(--accent);">🤖</button>
+      <span class="control-btn-label">Ask AI</span>
+    </div>
+    <div style="position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:20px;">
+      <button class="control-btn" id="raiseHandBtn" onclick="toggleRaiseHand()" title="Raise Hand">✋</button>
+      <span class="control-btn-label">Hand</span>
+    </div>
+    <div class="controls-divider"></div>
+    <div style="position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:20px;">
+      <button class="control-btn control-leave" onclick="leaveMeeting()" title="Leave">📞</button>
+      <span class="control-btn-label">Leave</span>
+    </div>
+  </div>
+
+</div><!-- /meeting-root -->
+
+<!-- ══ AI TERMINAL ════════════════════════════════════════════ -->
+<div class="ai-terminal-overlay" id="aiTerminalOverlay">
+  <div class="ai-terminal">
+    <div class="ai-terminal-header">
+      <h3>MeetAI Assistant <span style="font-size:.7rem;color:var(--text-muted);font-weight:400;">powered by Mistral</span></h3>
+      <div class="ai-terminal-controls">
+        <button class="btn btn-sm btn-ghost" onclick="stopAI()"     title="Stop AI speech">⏹ Stop</button>
+        <button class="btn btn-sm btn-ghost" onclick="continueAI()" title="Resume last response">▶ Continue</button>
+        <button class="btn btn-sm btn-ghost" onclick="closeAITerminal()">✕ Close</button>
+      </div>
+    </div>
+    <div class="ai-status-bar" id="aiStatusBar"></div>
+    <div id="aiChatLog">
+      <div class="ai-bubble ai-bubble-ai">
+        <div class="ai-bubble-label">🤖 MeetAI (Mistral)</div>
+        <div class="ai-bubble-text">
+          Hi! I'm your AI meeting assistant. I can see the live transcript and help you summarize, answer questions, or brainstorm.<br><br>
+          <strong>Tips:</strong> Say "Stop" to silence me. Say "Continue" to resume. I auto-pause when you speak.
+        </div>
+      </div>
+    </div>
+    <div class="ai-typing-indicator" id="aiTypingIndicator">MeetAI is thinking…</div>
+    <div class="ai-input-row">
+      <input class="input" id="aiInput" placeholder="Ask anything about this meeting…"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAIMessage();}">
+      <button class="btn btn-primary" onclick="sendAIMessage()">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- Error banner -->
+<div id="meetingError"></div>
+
+<!-- Spinner -->
+<div class="spinner-overlay" id="authSpinner" style="display:none;"><div class="spinner"></div></div>
+
+<!-- ══ SCRIPTS ════════════════════════════════════════════════ -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/webrtc.js"></script>
+<script src="js/transcription.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/meeting.js"></script>
+<script>
+// ── Sidebar tabs ────────────────────────────────────────────
+function switchSidebarTab(tab) {
+  document.querySelectorAll(".sidebar-tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".sidebar-pane").forEach(p => p.classList.remove("active"));
+  document.getElementById(`tab-${tab}`).classList.add("active");
+  document.getElementById(`pane-${tab}`).classList.add("active");
+}
+function toggleSidebar() {
+  const sb = document.getElementById("meetingSidebar");
+  sb.style.display = sb.style.display === "none" ? "flex" : "none";
+}
+
+// ── Raise hand ──────────────────────────────────────────────
+let handRaised = false;
+function toggleRaiseHand() {
+  handRaised = !handRaised;
+  const btn = document.getElementById("raiseHandBtn");
+  btn.style.background = handRaised ? "var(--warning)" : "";
+  if (window.webrtc) webrtc.presenceRef?.update({ handRaised });
+  if (handRaised) showToast("✋ You raised your hand");
+}
+
+// ── Private notes ───────────────────────────────────────────
+function savePrivateNotes() {
+  const mid = new URLSearchParams(location.search).get("id");
+  if (mid) localStorage.setItem(`meetai_notes_${mid}`, document.getElementById("privateNotes").value);
+}
+function downloadPrivateNotes() {
+  const mid  = new URLSearchParams(location.search).get("id") || "meeting";
+  const text = document.getElementById("privateNotes").value;
+  const a    = Object.assign(document.createElement("a"), {
+    href: URL.createObjectURL(new Blob([text], {type:"text/plain"})),
+    download: `private-notes-${mid}.txt`
+  });
+  a.click();
+}
+window.addEventListener("DOMContentLoaded", () => {
+  const mid = new URLSearchParams(location.search).get("id");
+  if (mid) {
+    const saved = localStorage.getItem(`meetai_notes_${mid}`);
+    if (saved) document.getElementById("privateNotes").value = saved;
+  }
+});
+
+// ── Screen share ────────────────────────────────────────────
+async function handleScreenShare() {
+  const main = document.getElementById("meetingMain");
+  if (!window.screenSharing) {
+    try {
+      const stream = await webrtc.startScreenShare(() => {
+        window.screenSharing = false;
+        document.getElementById("screenPreviewWrap").classList.remove("active");
+        main.classList.remove("screen-active");
+        _updateScreenBtn();
+      });
+      window.screenSharing = true;
+      document.getElementById("screenPreview").srcObject = stream;
+      document.getElementById("screenPreviewWrap").classList.add("active");
+      main.classList.add("screen-active");
+      _updateScreenBtn();
+    } catch (_) {}
+  } else {
+    await webrtc.stopScreenShare();
+    window.screenSharing = false;
+    document.getElementById("screenPreview").srcObject = null;
+    document.getElementById("screenPreviewWrap").classList.remove("active");
+    main.classList.remove("screen-active");
+    _updateScreenBtn();
+  }
+}
+function _updateScreenBtn() {
+  const btn = document.getElementById("shareScreenBtn");
+  if (!btn) return;
+  btn.textContent = window.screenSharing ? "🖥️🔴" : "🖥️";
+  btn.classList.toggle("control-active", !!window.screenSharing);
+}
+</script>
+</body>
+</html>
