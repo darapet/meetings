@@ -206,9 +206,12 @@ async function loadMeetingData() {
   document.getElementById("meetingTitle").textContent     = meetingData.name || "Meeting";
   document.getElementById("meetingIdDisplay").textContent = meetingId;
 
-  // Mark this user as a participant and set meeting active
+  // Write participant slot — any user can write their own uid slot
   await _meetingRef.child("participants/" + currentUser.uid).set(true);
-  await _meetingRef.update({ status: "active", lastActivity: firebase.database.ServerValue.TIMESTAMP });
+  // Only host may update meeting-level fields (rules enforce this)
+  if (isHost) {
+    await _meetingRef.update({ status: "active", lastActivity: firebase.database.ServerValue.TIMESTAMP });
+  }
 
   // Watch for host ending the meeting
   _meetingRef.on("value", snap => {
