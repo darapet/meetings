@@ -529,28 +529,22 @@ function _renderChatMessage(data) {
 function toggleAudio() {
   audioEnabled = !audioEnabled;
   webrtc.setAudioEnabled(audioEnabled);
-  const btn = document.getElementById("toggleMicBtn");
-  if (btn) { btn.textContent = audioEnabled ? "🎤" : "🔇"; btn.classList.toggle("control-off", !audioEnabled); }
+  if (typeof _syncMicIcon === "function") _syncMicIcon(audioEnabled);
 }
 
 function toggleVideo() {
   videoEnabled = !videoEnabled;
   webrtc.setVideoEnabled(videoEnabled);
   _setTileVideoVisible(currentUser.uid, videoEnabled);
-  updateVideoBtn();
-}
-
-function updateVideoBtn() {
-  const btn = document.getElementById("toggleCamBtn");
-  if (btn) { btn.textContent = videoEnabled ? "📷" : "📷🚫"; btn.classList.toggle("control-off", !videoEnabled); }
+  if (typeof _syncCamIcon === "function") _syncCamIcon(videoEnabled);
 }
 
 // ── Host controls ──────────────────────────────────────────
 function updateHostControls() {
-  const panel  = document.getElementById("hostControls");
-  const recBtn = document.getElementById("recordBtn");
-  if (panel)  panel.style.display  = isHost ? "flex" : "none";
-  if (recBtn) recBtn.style.display = isHost ? "flex" : "none";
+  const panel   = document.getElementById("hostControls");
+  const recWrap = document.getElementById("recordWrap");
+  if (panel)   panel.style.display   = isHost ? "flex" : "none";
+  if (recWrap) recWrap.style.display = isHost ? "flex" : "none";
 }
 
 function toggleAIToolsVisibility() {
