@@ -1,6 +1,58 @@
 {
   "rules": {
-    ".read":  "auth != null",
-    ".write": "auth != null"
+
+    "meetings": {
+      "$meetingId": {
+        ".read": "auth != null",
+
+        ".write": "auth != null && (!data.exists() || data.child('hostId').val() == auth.uid)",
+
+        "participants": {
+          "$uid": {
+            ".write": "auth != null && ($uid == auth.uid || root.child('meetings').child($meetingId).child('hostId').val() == auth.uid)"
+          }
+        }
+      }
+    },
+
+    "chat": {
+      "$meetingId": {
+        ".read":  "auth != null",
+        "$msgId": {
+          ".write": "auth != null && !data.exists() && newData.child('uid').val() == auth.uid"
+        }
+      }
+    },
+
+    "presence": {
+      "$meetingId": {
+        ".read":  "auth != null",
+        "$uid":   { ".write": "auth != null && $uid == auth.uid" }
+      }
+    },
+
+    "signals": {
+      "$meetingId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    "rooms": {
+      "$meetingId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    "joinRequests": {
+      "$meetingId": {
+        ".read": "auth != null",
+        "$uid": {
+          ".write": "auth != null && ($uid == auth.uid || root.child('meetings').child($meetingId).child('hostId').val() == auth.uid)"
+        }
+      }
+    }
+
   }
 }
