@@ -101,7 +101,12 @@ function _friendlyAuthError(err) {
     "auth/invalid-email":        "Invalid email address.",
     "auth/popup-closed-by-user": "Sign-in window closed. Please try again.",
     "auth/network-request-failed": "Network error. Check your connection.",
-    "auth/too-many-requests":    "Too many attempts. Try again later."
+    "auth/too-many-requests":    "Too many attempts. Try again later.",
+    "auth/unauthorized-domain":
+      "Google sign-in is blocked on this domain. " +
+      "To fix it: go to Firebase Console → Authentication → Settings → Authorized domains → " +
+      "Add domain → paste your site's URL (e.g. your-app.replit.app). " +
+      "Until then, please use Email/Password login above."
   };
   return map[err.code] || err.message;
 }
