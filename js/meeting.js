@@ -243,10 +243,14 @@ async function setupLocalMedia() {
 }
 
 function attachLocalStream(stream) {
-  const vid = document.getElementById("localVideo");
-  if (vid) { vid.srcObject = stream; vid.muted = true; }
-  addParticipantTile(currentUser.uid, currentUser.displayName, currentUser.photoURL, true);
-  updateVideoBtn();
+  // Pass stream into the tile so the <video> element gets a srcObject immediately
+  addParticipantTile(currentUser.uid, currentUser.displayName, currentUser.photoURL, true, stream);
+  // Belt-and-suspenders: set srcObject + mute in case the tile already existed
+  const vidEl = document.getElementById("vid-" + currentUser.uid);
+  if (vidEl) { vidEl.srcObject = stream; vidEl.muted = true; }
+  // Sync control-bar icons to the actual enabled state
+  if (typeof _syncCamIcon === "function") _syncCamIcon(videoEnabled);
+  if (typeof _syncMicIcon === "function") _syncMicIcon(audioEnabled);
 }
 
 // ── Remote streams ─────────────────────────────────────────
@@ -278,16 +282,28 @@ function addParticipantTile(uid, name, photo, isLocal, stream) {
     tile = document.createElement("div");
     tile.id        = "tile-" + uid;
     tile.className = "participant-tile";
-    const hostCrown = (uid === meetingData.hostId) ? " 👑" : "";
+    const hostBadge = (uid === meetingData.hostId)
+      ? `<span class="tile-host-badge">Host</span>` : "";
     tile.innerHTML = `
       <video autoplay playsinline ${isLocal ? "muted" : ""} id="vid-${uid}"></video>
       <div class="tile-avatar" id="avatar-${uid}">
         ${photo ? `<img src="${photo}" alt="">` : `<span>${escapeHtml(getInitials(name))}</span>`}
       </div>
-      <div class="tile-name">${escapeHtml(name)}${isLocal ? " (You)" : hostCrown}</div>
+      <div class="tile-name">${escapeHtml(name)}${isLocal ? " (You)" : ""} ${hostBadge}</div>
       <div class="tile-status">
-        <span class="status-icon" id="mic-${uid}">🎤</span>
-        <span class="status-icon" id="cam-${uid}">📷</span>
+        <span class="status-icon" id="mic-${uid}" title="Mic">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </span>
+        <span class="status-icon" id="cam-${uid}" title="Camera">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <polygon points="23 7 16 12 23 17 23 7"/>
+            <rect x="1" y="5" width="15" height="14" rx="2"/>
+          </svg>
+        </span>
       </div>`;
     grid.appendChild(tile);
   }
