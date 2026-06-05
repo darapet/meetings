@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MeetAI — Sign In</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .auth-wrap {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      min-height: 100vh;
+    }
+    .auth-hero {
+      background: linear-gradient(135deg, #0d0f14 0%, #13161e 60%, #1a1040 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 60px;
+      position: relative;
+      overflow: hidden;
+    }
+    .auth-hero::before {
+      content: "";
+      position: absolute;
+      top: -120px; right: -80px;
+      width: 500px; height: 500px;
+      background: radial-gradient(ellipse, rgba(108,99,255,0.25) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .auth-hero::after {
+      content: "";
+      position: absolute;
+      bottom: -80px; left: -60px;
+      width: 400px; height: 400px;
+      background: radial-gradient(ellipse, rgba(108,99,255,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-logo { font-size: 2rem; font-weight: 800; margin-bottom: 48px; letter-spacing: -1px; }
+    .hero-logo span { color: #6c63ff; }
+    .hero-headline { font-size: 2.6rem; font-weight: 700; line-height: 1.2; margin-bottom: 20px; letter-spacing: -0.5px; }
+    .hero-headline em { color: #6c63ff; font-style: normal; }
+    .hero-sub { color: #8b8fa8; font-size: 1.05rem; max-width: 380px; margin-bottom: 48px; }
+    .feature-list { display: flex; flex-direction: column; gap: 14px; }
+    .feature-item { display: flex; align-items: center; gap: 12px; color: #8b8fa8; font-size: 0.9rem; }
+    .feature-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: rgba(108,99,255,0.15);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.95rem; flex-shrink: 0;
+    }
+
+    .auth-panel {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      background: #0d0f14;
+    }
+    .auth-box {
+      width: 100%;
+      max-width: 420px;
+    }
+    .auth-box h2 { margin-bottom: 6px; }
+    .auth-box .sub { margin-bottom: 32px; font-size: 0.9rem; }
+    .tabs { display: flex; gap: 0; margin-bottom: 28px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .tab-btn {
+      flex: 1; padding: 10px; background: transparent;
+      border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 0.88rem; font-weight: 600; font-family: var(--font);
+      transition: all var(--transition);
+    }
+    .tab-btn.active { background: var(--accent); color: #fff; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .google-btn {
+      width: 100%;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      padding: 11px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      font-family: var(--font); font-size: 0.9rem; font-weight: 600;
+      cursor: pointer; transition: background var(--transition);
+    }
+    .google-btn:hover { background: rgba(255,255,255,0.08); }
+    .google-btn svg { width: 18px; height: 18px; }
+    .footer-note { text-align: center; margin-top: 24px; font-size: 0.8rem; color: var(--text-muted); }
+    @media (max-width: 768px) {
+      .auth-wrap { grid-template-columns: 1fr; }
+      .auth-hero { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="auth-wrap">
+  <!-- Hero side -->
+  <div class="auth-hero">
+    <div class="hero-logo">Meet<span>AI</span></div>
+    <h1 class="hero-headline">Meetings that<br><em>think with you</em></h1>
+    <p class="hero-sub">Real-time video conferencing with live AI transcription, smart summarization, and an intelligent meeting assistant — all in one place.</p>
+    <div class="feature-list">
+      <div class="feature-item"><div class="feature-icon">🎙️</div> Live AI transcription with noise handling</div>
+      <div class="feature-item"><div class="feature-icon">📖</div> Book-mode meeting summaries</div>
+      <div class="feature-item"><div class="feature-icon">🤖</div> Dedicated AI terminal per meeting</div>
+      <div class="feature-item"><div class="feature-icon">🖥️</div> Screen sharing with floating tools</div>
+      <div class="feature-item"><div class="feature-icon">🔒</div> Host privacy controls for AI panels</div>
+    </div>
+  </div>
+
+  <!-- Auth panel -->
+  <div class="auth-panel">
+    <div class="auth-box">
+      <h2>Welcome back</h2>
+      <p class="sub">Sign in to start or join a meeting</p>
+
+      <div id="authError" class="alert alert-error" style="display:none;"></div>
+
+      <!-- Google -->
+      <button class="google-btn" onclick="signInWithGoogle()">
+        <svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
+        Continue with Google
+      </button>
+
+      <div class="form-divider">or</div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('signin')">Sign In</button>
+        <button class="tab-btn" onclick="switchTab('register')">Register</button>
+      </div>
+
+      <!-- Sign in -->
+      <div id="tab-signin" class="tab-content active">
+        <form onsubmit="handleSignIn(event)">
+          <div class="input-group">
+            <label for="siEmail">Email</label>
+            <input class="input" type="email" id="siEmail" placeholder="you@example.com" required>
+          </div>
+          <div class="input-group">
+            <label for="siPassword">Password</label>
+            <input class="input" type="password" id="siPassword" placeholder="••••••••" required>
+          </div>
+          <button class="btn btn-primary btn-block btn-lg" type="submit">Sign In</button>
+        </form>
+      </div>
+
+      <!-- Register -->
+      <div id="tab-register" class="tab-content">
+        <form onsubmit="handleRegister(event)">
+          <div class="input-group">
+            <label for="regName">Full Name</label>
+            <input class="input" type="text" id="regName" placeholder="Jane Smith" required>
+          </div>
+          <div class="input-group">
+            <label for="regEmail">Email</label>
+            <input class="input" type="email" id="regEmail" placeholder="you@example.com" required>
+          </div>
+          <div class="input-group">
+            <label for="regPassword">Password</label>
+            <input class="input" type="password" id="regPassword" placeholder="Min. 8 characters" minlength="8" required>
+          </div>
+          <button class="btn btn-primary btn-block btn-lg" type="submit">Create Account</button>
+        </form>
+      </div>
+
+      <p class="footer-note">By continuing you agree to our Terms of Service.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Spinner -->
+<div class="spinner-overlay" id="authSpinner" style="display:none;">
+  <div class="spinner"></div>
+</div>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script>
+  // Redirect if already logged in
+  onAuthReady(user => {
+    if (user) window.location.href = "dashboard.html";
+    hideAuthSpinner();
+  });
+
+  function switchTab(tab) {
+    document.querySelectorAll(".tab-btn").forEach((b, i) => b.classList.toggle("active", i === (tab === "signin" ? 0 : 1)));
+    document.getElementById("tab-signin").classList.toggle("active", tab === "signin");
+    document.getElementById("tab-register").classList.toggle("active", tab === "register");
+    clearAuthError();
+  }
+
+  function handleSignIn(e) {
+    e.preventDefault();
+    clearAuthError();
+    signInWithEmail(
+      document.getElementById("siEmail").value,
+      document.getElementById("siPassword").value
+    );
+  }
+
+  function handleRegister(e) {
+    e.preventDefault();
+    clearAuthError();
+    registerWithEmail(
+      document.getElementById("regEmail").value,
+      document.getElementById("regPassword").value,
+      document.getElementById("regName").value
+    );
+  }
+
+  // Redirect after auth
+  auth.onAuthStateChanged(user => { if (user) window.location.href = "dashboard.html"; });
+</script>
+</body>
+</html>
