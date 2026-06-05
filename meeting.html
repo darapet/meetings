@@ -146,6 +146,13 @@
       <button class="control-btn" id="raiseHandBtn" onclick="toggleRaiseHand()" title="Raise Hand">✋</button>
       <span class="control-btn-label">Hand</span>
     </div>
+    <!-- Record button — host only, hidden until updateHostControls() runs -->
+    <div data-rec-wrap style="position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:20px;">
+      <button class="control-btn" id="recordBtn"
+        onclick="toggleRecording()" title="Start Recording"
+        style="display:none;">⏺</button>
+      <span class="control-btn-label">Record</span>
+    </div>
     <div class="controls-divider"></div>
     <div style="position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:20px;">
       <button class="control-btn control-leave" onclick="leaveMeeting()" title="Leave">📞</button>
@@ -245,6 +252,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const saved = localStorage.getItem(`meetai_notes_${mid}`);
     if (saved) document.getElementById("privateNotes").value = saved;
   }
+  initMeeting();
 });
 
 // ── Screen share ────────────────────────────────────────────
