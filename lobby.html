@@ -33,7 +33,6 @@
       box-shadow: var(--shadow);
     }
 
-    /* Camera preview */
     .preview-wrap {
       width: 240px; height: 160px;
       background: #000;
@@ -63,7 +62,6 @@
     .preview-btn:hover { background: rgba(255,255,255,0.1); }
     .preview-btn.off { background: var(--danger); border-color: var(--danger); }
 
-    /* Status area */
     .lobby-status {
       display: flex;
       flex-direction: column;
@@ -129,7 +127,6 @@
   <div class="lobby-logo">Meet<span>AI</span></div>
 
   <div class="lobby-card">
-    <!-- Camera preview -->
     <div class="preview-wrap">
       <video id="previewVideo" autoplay playsinline muted></video>
       <div class="avatar-preview" id="previewAvatar" style="display:none;"></div>
@@ -139,16 +136,12 @@
       <button class="preview-btn" id="camToggle" onclick="toggleCam()" title="Toggle camera">📷</button>
     </div>
 
-    <!-- Status -->
-    <div class="lobby-status" id="lobbyStatus">
-      <!-- Filled by JS -->
-    </div>
+    <div class="lobby-status" id="lobbyStatus"></div>
 
     <button class="btn btn-ghost btn-sm" id="leaveBtn" onclick="window.location.href='dashboard.html'" style="margin-top:20px;">← Leave</button>
   </div>
 </div>
 
-<!-- Spinner -->
 <div class="spinner-overlay" id="authSpinner" style="display:none;"><div class="spinner"></div></div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -164,9 +157,7 @@ let localStream  = null;
 let micOn        = true;
 let camOn        = true;
 let requestRef   = null;
-let statusUnsubscribe = null;
 
-// ── Init ──────────────────────────────────────────────────
 onAuthReady(async user => {
   hideAuthSpinner();
   if (!user) {
@@ -179,41 +170,35 @@ onAuthReady(async user => {
   meetingId = params.get("id");
   if (!meetingId) { window.location.href = "dashboard.html"; return; }
 
-  // Check meeting exists
-  const snap = await firestore.collection("meetings").doc(meetingId).get();
-  if (!snap.exists) {
+  // Check meeting exists in Realtime Database
+  const snap = await db.ref("meetings/" + meetingId).once("value");
+  if (!snap.exists()) {
     setStatus("error", "Meeting not found", "The meeting ID is invalid or it has been deleted.");
     return;
   }
 
-  const data = snap.data();
+  const data = snap.val();
 
-  // Host goes straight to meeting room
+  // Host goes straight in
   if (data.hostId === user.uid) {
-    window.location.href = `meeting.html?id=${meetingId}`;
+    window.location.href = "meeting.html?id=" + meetingId;
     return;
   }
 
-  // If meeting has ended
   if (data.status === "ended") {
     setStatus("declined", "Meeting ended", "This meeting has already ended.");
     return;
   }
 
-  // Start camera preview
   await startPreview();
-
-  // Place join request and wait for host approval
   await placeJoinRequest(data.name || "Meeting", user);
 });
 
-// ── Camera preview ────────────────────────────────────────
 async function startPreview() {
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     document.getElementById("previewVideo").srcObject = localStream;
   } catch (_) {
-    // No camera — show avatar
     camOn = false;
     document.getElementById("previewVideo").style.display = "none";
     document.getElementById("previewAvatar").style.display = "flex";
@@ -243,11 +228,9 @@ function toggleCam() {
   btn.classList.toggle("off", !camOn);
 }
 
-// ── Join Request ──────────────────────────────────────────
 async function placeJoinRequest(meetingName, user) {
-  requestRef = db.ref(`joinRequests/${meetingId}/${user.uid}`);
+  requestRef = db.ref("joinRequests/" + meetingId + "/" + user.uid);
 
-  // Write the request
   await requestRef.set({
     uid:         user.uid,
     displayName: user.displayName || "Guest",
@@ -256,46 +239,33 @@ async function placeJoinRequest(meetingName, user) {
     status:      "pending"
   });
 
-  // Clean up on page close
   requestRef.onDisconnect().remove();
-
-  // Show waiting UI
   showWaitingStatus(meetingName);
 
-  // Watch for host response
   requestRef.on("value", snap => {
     const data = snap.val();
     if (!data) return;
-
     if (data.status === "admitted") {
       showAdmittedStatus();
-      // Stop preview tracks before entering meeting
       if (localStream) localStream.getTracks().forEach(t => t.stop());
-      setTimeout(() => {
-        window.location.href = `meeting.html?id=${meetingId}`;
-      }, 1800);
+      setTimeout(() => { window.location.href = "meeting.html?id=" + meetingId; }, 1800);
     } else if (data.status === "declined") {
       showDeclinedStatus();
       requestRef.remove();
     }
   });
 
-  // Also watch if host has not joined yet (no presence)
-  const hostPresenceRef = db.ref(`presence/${meetingId}`);
+  const hostPresenceRef = db.ref("presence/" + meetingId);
   hostPresenceRef.once("value", snap => {
-    if (!snap.exists() || !snap.val()) {
-      showWaitingForHostStatus(meetingName);
-    }
+    if (!snap.exists() || !snap.val()) showWaitingForHostStatus(meetingName);
   });
   hostPresenceRef.on("child_added", () => {
-    // Host (or someone) joined — re-show normal waiting if we're still pending
     requestRef.once("value", snap => {
       if (snap.val()?.status === "pending") showWaitingStatus(meetingName);
     });
   });
 }
 
-// ── Status UI ─────────────────────────────────────────────
 function showWaitingStatus(meetingName) {
   document.getElementById("lobbyStatus").innerHTML = `
     <span class="meeting-name-chip">📅 ${escapeHtml(meetingName)}</span>
