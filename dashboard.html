@@ -331,17 +331,22 @@ function openScheduleModal() { openModal("createModal"); }
 
 async function confirmCreateMeeting(e) {
   e.preventDefault();
+  const user = currentUser || auth.currentUser;
+  if (!user) {
+    alert("Your session is still loading — please wait a moment and try again.");
+    return;
+  }
   const name = document.getElementById("meetingName").value.trim() || "Untitled Meeting";
   showAuthSpinner();
   try {
     const id  = generateMeetingId();
     await firestore.collection("meetings").doc(id).set({
       name,
-      hostId:       currentUser.uid,
-      hostName:     currentUser.displayName || "Host",
+      hostId:       user.uid,
+      hostName:     user.displayName || "Host",
       status:       "active",
       createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
-      participants: [currentUser.uid],
+      participants: [user.uid],
       transcript:   "",
       allowGuests:  document.getElementById("allowGuests").checked
     });
