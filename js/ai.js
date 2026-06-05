@@ -157,18 +157,21 @@ ${transcript ? `\n\n--- LIVE MEETING TRANSCRIPT ---\n${transcript.slice(-3000)}\
     } catch (_) {}
   }
 
-  // ── Save summary to Firestore ──────────────────────────────
-  async saveSummaryToFirestore(summary, mode) {
+  // ── Save summary to Realtime Database ─────────────────────
+  async saveSummaryToRTDB(summary, mode) {
     try {
-      await firestore.collection("meetings").doc(this.meetingId)
-        .collection("summaries").add({
-          summary,
-          mode,
-          userId:    this.userId,
-          model:     MISTRAL_MODEL,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+      await db.ref("meetings/" + this.meetingId + "/summaries").push({
+        summary,
+        mode,
+        userId:    this.userId,
+        createdAt: firebase.database.ServerValue.TIMESTAMP
+      });
     } catch (_) {}
+  }
+
+  // Keep old name as alias so any existing call sites don't break
+  async saveSummaryToFirestore(summary, mode) {
+    return this.saveSummaryToRTDB(summary, mode);
   }
 
   // ── Cleanup ────────────────────────────────────────────────
