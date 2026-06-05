@@ -7,10 +7,6 @@ const auth      = firebase.auth();
 const db        = firebase.database();
 const firestore = firebase.firestore();
 
-// Enable Firestore offline persistence so the app works even
-// with intermittent connectivity (host/guest reconnection)
-firestore.enablePersistence({ synchronizeTabs: true }).catch(() => {});
-
 // ── Providers ─────────────────────────────────────────────
 const googleProvider = new firebase.auth.GoogleAuthProvider();
 googleProvider.addScope("profile");
@@ -68,11 +64,10 @@ async function _upsertUserProfile(user) {
     email:       user.email       || "",
     photoURL:    user.photoURL    || "",
     lastSeen:    firebase.firestore.FieldValue.serverTimestamp()
-  }, { merge: true });   // merge:true keeps existing fields (e.g. createdAt)
+  }, { merge: true });
 }
 
 // ── Auth State Observer ───────────────────────────────────
-//    Also syncs the profile on every sign-in event.
 function onAuthReady(callback) {
   return auth.onAuthStateChanged(async user => {
     if (user) await _upsertUserProfile(user);
@@ -105,8 +100,8 @@ function _friendlyAuthError(err) {
     "auth/unauthorized-domain":
       "Google sign-in is blocked on this domain. " +
       "To fix it: go to Firebase Console → Authentication → Settings → Authorized domains → " +
-      "Add domain → paste your site's URL (e.g. your-app.replit.app). " +
-      "Until then, please use Email/Password login above."
+      "Add domain → paste your site URL. " +
+      "Until then, please use Email/Password login."
   };
   return map[err.code] || err.message;
 }
