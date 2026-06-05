@@ -5,7 +5,7 @@
 firebase.initializeApp(firebaseConfig);
 const auth      = firebase.auth();
 const db        = firebase.database();
-const firestore = firebase.firestore();
+const firestore = firebase.firestore(); // kept for legacy; meeting code uses RTDB
 
 // ── Providers ─────────────────────────────────────────────
 const googleProvider = new firebase.auth.GoogleAuthProvider();
@@ -40,7 +40,7 @@ async function registerWithEmail(email, password, displayName) {
     showAuthSpinner();
     const cred = await auth.createUserWithEmailAndPassword(email, password);
     await cred.user.updateProfile({ displayName });
-    await _upsertUserProfile(cred.user);
+    _upsertUserProfile(cred.user); // fire-and-forget
   } catch (err) {
     hideAuthSpinner();
     showAuthError(_friendlyAuthError(err));
@@ -53,24 +53,25 @@ async function signOut() {
   window.location.href = "index.html";
 }
 
-// ── Create / Update User Profile in Firestore ────────────
-//    Called on every login so profile stays fresh.
-async function _upsertUserProfile(user) {
-  if (!user) return;
-  const ref = firestore.collection("users").doc(user.uid);
-  await ref.set({
+// ── Save / Update User Profile in Realtime Database ───────
+//    Fire-and-forget — never awaited in onAuthReady so it
+//    can NEVER block the page from loading.
+function _upsertUserProfile(user) {
+  if (!user) return Promise.resolve();
+  return db.ref("users/" + user.uid).update({
     uid:         user.uid,
     displayName: user.displayName || "Anonymous",
     email:       user.email       || "",
     photoURL:    user.photoURL    || "",
-    lastSeen:    firebase.firestore.FieldValue.serverTimestamp()
-  }, { merge: true });
+    lastSeen:    firebase.database.ServerValue.TIMESTAMP
+  }).catch(() => {}); // silently ignore any write failures
 }
 
 // ── Auth State Observer ───────────────────────────────────
+//    Callback fires IMMEDIATELY — profile save is fire-and-forget.
 function onAuthReady(callback) {
-  return auth.onAuthStateChanged(async user => {
-    if (user) await _upsertUserProfile(user);
+  return auth.onAuthStateChanged(user => {
+    if (user) _upsertUserProfile(user); // intentionally NOT awaited
     callback(user);
   });
 }
