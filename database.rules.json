@@ -1,15 +1,25 @@
 {
   "rules": {
 
+    "users": {
+      "$uid": {
+        ".read":  "auth != null && $uid == auth.uid",
+        ".write": "auth != null && $uid == auth.uid"
+      }
+    },
+
     "meetings": {
       "$meetingId": {
         ".read": "auth != null",
-
         ".write": "auth != null && (!data.exists() || data.child('hostId').val() == auth.uid)",
-
         "participants": {
           "$uid": {
             ".write": "auth != null && ($uid == auth.uid || root.child('meetings').child($meetingId).child('hostId').val() == auth.uid)"
+          }
+        },
+        "summaries": {
+          "$sumId": {
+            ".write": "auth != null && root.child('meetings').child($meetingId).child('hostId').val() == auth.uid"
           }
         }
       }
