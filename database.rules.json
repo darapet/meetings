@@ -1,0 +1,28 @@
+{
+  "rules": {
+    "presence": {
+      "$meetingId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "signals": {
+      "$meetingId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "rooms": {
+      "$meetingId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "joinRequests": {
+      "$meetingId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    }
+  }
+}
