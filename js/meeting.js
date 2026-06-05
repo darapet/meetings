@@ -168,60 +168,74 @@ async function initMeeting() {
       return;
     }
     currentUser = user;
-    showAuthSpinner();
-    try {
-      await loadMeetingData();
-      await setupLocalMedia();
-      setupWebRTC();
-      setupTranscription();
-      setupAI();
-      setupChat();
-      setupPresenceDisplay();
-      updateHostControls();
-      startMeetingTimer();
-      if (isHost) listenForJoinRequests();
-    } catch (err) {
-      showMeetingError("Failed to start: " + err.message);
-    } finally {
-      hideAuthSpinner();
+    hideAuthSpinner();
+
+    // ── PHASE 1: Camera + mic — always first, never blocked ─
+    await setupLocalMedia();
+
+    // ── PHASE 2: Load meeting metadata from RTDB (best-effort) ─
+    await loadMeetingData();
+
+    // ── PHASE 3: Start all services ─────────────────────────
+    try { setupWebRTC();        } catch (e) { console.error("WebRTC init:", e); }
+    try { setupTranscription(); } catch (e) { console.error("Transcription init:", e); }
+    try { setupAI();            } catch (e) { console.error("AI init:", e); }
+    try { setupChat();          } catch (e) { console.error("Chat init:", e); }
+    try { setupPresenceDisplay(); } catch (e) { console.error("Presence init:", e); }
+    updateHostControls();
+    startMeetingTimer();
+    if (isHost) {
+      try { listenForJoinRequests(); } catch (e) { console.error("JoinReq init:", e); }
     }
   });
 }
 
-// ── Load meeting data from Realtime Database ───────────────
+// ── Load meeting data from Realtime Database (never throws) ─
 async function loadMeetingData() {
-  _meetingRef = db.ref("meetings/" + meetingId);
-  const snap  = await _meetingRef.once("value");
+  try {
+    _meetingRef = db.ref("meetings/" + meetingId);
+    const snap  = await _meetingRef.once("value");
 
-  if (!snap.exists()) {
-    showMeetingError("Meeting not found.");
-    setTimeout(() => { window.location.href = "dashboard.html"; }, 3000);
-    return;
-  }
-
-  meetingData = snap.val();
-  isHost      = meetingData.hostId === currentUser.uid;
-
-  document.title = `${meetingData.name || "Meeting"} — MeetAI`;
-  document.getElementById("meetingTitle").textContent     = meetingData.name || "Meeting";
-  document.getElementById("meetingIdDisplay").textContent = meetingId;
-
-  // Write participant slot — any user can write their own uid slot
-  await _meetingRef.child("participants/" + currentUser.uid).set(true);
-  // Only host may update meeting-level fields (rules enforce this)
-  if (isHost) {
-    await _meetingRef.update({ status: "active", lastActivity: firebase.database.ServerValue.TIMESTAMP });
-  }
-
-  // Watch for host ending the meeting
-  _meetingRef.on("value", snap => {
-    if (!snap.exists()) return;
-    const d = snap.val();
-    if (d.status === "ended" && !isHost) {
-      showMeetingError("The host has ended this meeting.");
-      setTimeout(() => { window.location.href = "dashboard.html"; }, 3000);
+    if (!snap.exists()) {
+      // Meeting may not have been created yet or rules are pending —
+      // keep UI functional with defaults instead of redirecting
+      console.warn("Meeting not found in RTDB — using defaults");
+      document.getElementById("meetingTitle").textContent = "Meeting";
+      return;
     }
-  });
+
+    meetingData = snap.val();
+    isHost      = meetingData.hostId === currentUser.uid;
+
+    document.title = (meetingData.name || "Meeting") + " — MeetAI";
+    document.getElementById("meetingTitle").textContent = meetingData.name || "Meeting";
+
+    // Register ourselves as a participant (best-effort)
+    _meetingRef.child("participants/" + currentUser.uid).set(true).catch(() => {});
+
+    // Host: mark meeting active (best-effort)
+    if (isHost) {
+      _meetingRef.update({
+        status: "active",
+        lastActivity: firebase.database.ServerValue.TIMESTAMP
+      }).catch(() => {});
+    }
+
+    // Watch for host ending the meeting
+    _meetingRef.on("value", snap => {
+      if (!snap.exists()) return;
+      const d = snap.val();
+      if (d.status === "ended" && !isHost) {
+        showMeetingError("The host has ended this meeting.");
+        setTimeout(() => { window.location.href = "dashboard.html"; }, 3000);
+      }
+    });
+
+  } catch (err) {
+    // RTDB read failed (e.g. rules not yet published) — page still works
+    console.warn("loadMeetingData failed:", err.message);
+    document.getElementById("meetingTitle").textContent = "Meeting";
+  }
 }
 
 // ── Local media ────────────────────────────────────────────
