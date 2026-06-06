@@ -178,16 +178,17 @@
 <script src="js/config.js"></script>
 <script src="js/auth.js"></script>
 <script>
-let meetingId     = null;
-let currentUser   = null;
-let localStream   = null;
-let micOn         = true;
-let camOn         = true;
-let requestRef    = null;
-let _micAnalyser  = null;
-let _micAnimId    = null;
-let _customFields = [];   // host-defined extra fields
-let _fieldValues  = {};   // { label: value } for current guest
+let meetingId      = null;
+let currentUser    = null;
+let localStream    = null;
+let micOn          = true;
+let camOn          = true;
+let requestRef     = null;
+let _micAnalyser   = null;
+let _micAnimId     = null;
+let _customFields  = [];     // host-defined extra fields
+let _fieldValues   = {};     // { label: value } for current guest
+let _isHostPreJoin = false;  // true when host is doing camera check
 
 function getInitials(name) {
   if (!name) return "?";
@@ -208,6 +209,7 @@ onAuthReady(async user => {
 
   const params = new URLSearchParams(window.location.search);
   meetingId = params.get("id");
+  const isHostParam = params.get("host") === "1";
   if (!meetingId) { window.location.href = "dashboard.html"; return; }
 
   // Check meeting exists
@@ -225,9 +227,13 @@ onAuthReady(async user => {
     meetingData = { hostId: null, name: "Meeting", status: "active" };
   }
 
-  // Host goes straight in, no lobby needed
-  if (meetingData.hostId === user.uid) {
-    window.location.href = "meeting.html?id=" + meetingId;
+  // Host with ?host=1 gets a camera-check pre-join screen
+  if (meetingData.hostId === user.uid || isHostParam) {
+    _isHostPreJoin = true;
+    document.getElementById("nameStep").style.display = "none";
+    showStep2();
+    await startPreview();
+    _showHostReadyStatus(meetingData.name || "Meeting");
     return;
   }
 
@@ -504,6 +510,27 @@ function setStatus(type, heading, sub) {
       <div class="lobby-heading">${escapeHtml(heading)}</div>
       <p class="lobby-sub">${escapeHtml(sub)}</p>
     </div>`;
+}
+
+// ── Host pre-join camera check ─────────────────────────────
+function _showHostReadyStatus(meetingName) {
+  document.getElementById("lobbyStatus").innerHTML = `
+    <span class="meeting-name-chip">${escapeHtml(meetingName)}</span>
+    <div>
+      <div class="lobby-heading">Camera &amp; mic check ✓</div>
+      <p class="lobby-sub">Everything looks good! Start your meeting when ready.</p>
+    </div>
+    <button class="btn btn-primary" style="min-width:160px;" onclick="_hostEnterMeeting()">
+      Start Meeting →
+    </button>`;
+  // Change leave button label
+  const lb = document.getElementById("leaveBtn");
+  if (lb) lb.textContent = "← Back to Dashboard";
+}
+
+function _hostEnterMeeting() {
+  stopPreview();
+  window.location.href = "meeting.html?id=" + meetingId;
 }
 </script>
 </body>
