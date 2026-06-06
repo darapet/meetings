@@ -17,7 +17,7 @@ let participants   = {};
 let aiLastResponse = "";
 let recorder       = null;
 let remoteStreams   = new Map();
-let _meetingRef    = null; // RTDB ref for the meeting
+let _meetingRef    = null;
 
 // ============================================================
 //  MEETING RECORDER
@@ -40,21 +40,16 @@ class MeetingRecorder {
   start(localStream, remoteStreamMap) {
     this.audioCtx = new AudioContext();
     this.dest     = this.audioCtx.createMediaStreamDestination();
-    if (localStream)  this._addAudio(localStream, "local");
+    if (localStream) this._addAudio(localStream, "local");
     remoteStreamMap.forEach((stream, uid) => this._addAudio(stream, uid));
     this._drawLoop();
 
     const videoTrack  = this.canvas.captureStream(30).getVideoTracks()[0];
     const audioTracks = this.dest.stream.getAudioTracks();
-    const combined    = new MediaStream(audioTracks.length
-      ? [videoTrack, audioTracks[0]]
-      : [videoTrack]);
+    const combined    = new MediaStream(audioTracks.length ? [videoTrack, audioTracks[0]] : [videoTrack]);
 
-    const mimeType = [
-      "video/webm;codecs=vp9,opus",
-      "video/webm;codecs=vp8,opus",
-      "video/webm"
-    ].find(t => MediaRecorder.isTypeSupported(t)) || "video/webm";
+    const mimeType = ["video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm"]
+      .find(t => MediaRecorder.isTypeSupported(t)) || "video/webm";
 
     this.chunks        = [];
     this.mediaRecorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 2_500_000 });
@@ -75,39 +70,29 @@ class MeetingRecorder {
     } catch (_) {}
   }
 
-  addRemoteStream(uid, stream) {
-    if (this.isRecording) this._addAudio(stream, uid);
-  }
+  addRemoteStream(uid, stream) { if (this.isRecording) this._addAudio(stream, uid); }
 
-  _drawLoop() {
-    this._drawFrame();
-    this.animId = requestAnimationFrame(() => this._drawLoop());
-  }
+  _drawLoop() { this._drawFrame(); this.animId = requestAnimationFrame(() => this._drawLoop()); }
 
   _drawFrame() {
-    const W = 1280, H = 720;
-    const ctx = this.ctx;
+    const W = 1280, H = 720, ctx = this.ctx;
     ctx.fillStyle = "#0d0f14";
     ctx.fillRect(0, 0, W, H);
-
     const tiles = [...document.querySelectorAll("#participantGrid .participant-tile")];
     const count = tiles.length || 1;
     const cols  = count === 1 ? 1 : count <= 2 ? 2 : count <= 4 ? 2 : 3;
     const rows  = Math.ceil(count / cols);
-    const tw    = W / cols;
-    const th    = H / rows;
-
+    const tw = W / cols, th = H / rows;
     tiles.forEach((tile, i) => {
       const col = i % cols, row = Math.floor(i / cols);
-      const x = col * tw,   y  = row * th;
+      const x = col * tw, y = row * th;
       ctx.fillStyle = "#1a1e2a";
       ctx.fillRect(x, y, tw, th);
       const vid = tile.querySelector("video");
       if (vid && vid.readyState >= 2 && vid.videoWidth > 0) {
         const scale = Math.max(tw / vid.videoWidth, th / vid.videoHeight);
         const dw = vid.videoWidth * scale, dh = vid.videoHeight * scale;
-        ctx.save();
-        ctx.beginPath(); ctx.rect(x, y, tw, th); ctx.clip();
+        ctx.save(); ctx.beginPath(); ctx.rect(x, y, tw, th); ctx.clip();
         ctx.drawImage(vid, x + (tw - dw) / 2, y + (th - dh) / 2, dw, dh);
         ctx.restore();
       }
@@ -117,8 +102,8 @@ class MeetingRecorder {
         ctx.font = "bold 14px Inter, sans-serif";
         const tw2 = ctx.measureText(name).width + 24;
         ctx.fillStyle = "rgba(0,0,0,0.62)";
-        ctx.beginPath();
         const lx = x + 10, ly = y + th - 36, lh = 26, r = 8;
+        ctx.beginPath();
         ctx.moveTo(lx + r, ly); ctx.lineTo(lx + tw2 - r, ly);
         ctx.quadraticCurveTo(lx + tw2, ly, lx + tw2, ly + r);
         ctx.lineTo(lx + tw2, ly + lh - r);
@@ -128,18 +113,14 @@ class MeetingRecorder {
         ctx.lineTo(lx, ly + r);
         ctx.quadraticCurveTo(lx, ly, lx + r, ly);
         ctx.closePath(); ctx.fill();
-        ctx.fillStyle = "#fff";
-        ctx.fillText(name, lx + 12, ly + lh - 7);
+        ctx.fillStyle = "#fff"; ctx.fillText(name, lx + 12, ly + lh - 7);
       }
     });
-
     if (Math.floor(Date.now() / 700) % 2 === 0) {
       ctx.fillStyle = "#ef4444";
       ctx.beginPath(); ctx.arc(W - 36, 22, 8, 0, Math.PI * 2); ctx.fill();
     }
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 13px Inter, sans-serif";
-    ctx.fillText("REC", W - 24, 27);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 13px Inter, sans-serif"; ctx.fillText("REC", W - 24, 27);
   }
 
   stop() {
@@ -170,28 +151,25 @@ async function initMeeting() {
     currentUser = user;
     hideAuthSpinner();
 
-    // ── PHASE 1: Camera + mic — always first, never blocked ─
+    // PHASE 1: Camera + mic — always first, never blocked by RTDB
     await setupLocalMedia();
 
-    // ── PHASE 2: Load meeting metadata from RTDB (best-effort) ─
+    // PHASE 2: Load meeting metadata from RTDB (never throws)
     await loadMeetingData();
 
-    // ── PHASE 3: Start all services ─────────────────────────
-    try { setupWebRTC();        } catch (e) { console.error("WebRTC init:", e); }
-    try { setupTranscription(); } catch (e) { console.error("Transcription init:", e); }
-    try { setupAI();            } catch (e) { console.error("AI init:", e); }
-    try { setupChat();          } catch (e) { console.error("Chat init:", e); }
-    try { setupPresenceDisplay(); } catch (e) { console.error("Presence init:", e); }
-    try { setupAIBroadcastListener(); } catch (e) { console.error("AI broadcast init:", e); }
+    // PHASE 3: Start all services, each isolated
+    try { setupWebRTC();              } catch (e) { console.error("WebRTC:", e); }
+    try { setupTranscription();       } catch (e) { console.error("Transcription:", e); }
+    try { setupAI();                  } catch (e) { console.error("AI:", e); }
+    try { setupChat();                } catch (e) { console.error("Chat:", e); }
+    try { setupPresenceDisplay();     } catch (e) { console.error("Presence:", e); }
+    try { setupAIBroadcastListener(); } catch (e) { console.error("AI Broadcast:", e); }
     updateHostControls();
     startMeetingTimer();
-    if (isHost) {
-      try { listenForJoinRequests(); } catch (e) { console.error("JoinReq init:", e); }
-    }
   });
 }
 
-// ── Load meeting data from Realtime Database (never throws) ─
+// ── Load meeting data from RTDB (never throws) ─────────────
 async function loadMeetingData() {
   try {
     _meetingRef = db.ref("meetings/" + meetingId);
@@ -209,18 +187,12 @@ async function loadMeetingData() {
     document.title = (meetingData.name || "Meeting") + " — MeetAI";
     document.getElementById("meetingTitle").textContent = meetingData.name || "Meeting";
 
-    // Register ourselves as a participant (best-effort)
     _meetingRef.child("participants/" + currentUser.uid).set(true).catch(() => {});
-
-    // Host: mark meeting active (best-effort)
     if (isHost) {
-      _meetingRef.update({
-        status: "active",
-        lastActivity: firebase.database.ServerValue.TIMESTAMP
-      }).catch(() => {});
+      _meetingRef.update({ status: "active", lastActivity: firebase.database.ServerValue.TIMESTAMP }).catch(() => {});
     }
 
-    // Watch for host ending the meeting
+    // Watch for host ending meeting
     _meetingRef.on("value", snap => {
       if (!snap.exists()) return;
       const d = snap.val();
@@ -229,6 +201,11 @@ async function loadMeetingData() {
         setTimeout(() => { window.location.href = "dashboard.html"; }, 3000);
       }
     });
+
+    // Admit queue — call here so isHost is guaranteed set
+    if (isHost) {
+      try { listenForJoinRequests(); } catch (e) { console.error("JoinReq:", e); }
+    }
 
   } catch (err) {
     console.warn("loadMeetingData failed:", err.message);
@@ -247,7 +224,7 @@ async function setupLocalMedia() {
       const stream = await webrtc.getLocalStream(false, true);
       videoEnabled = false;
       attachLocalStream(stream);
-      showToast("📷 Camera unavailable — audio only.");
+      showToast("Camera unavailable — audio only.");
     } catch (e) {
       showMeetingError("Microphone access denied. Please allow it and reload.");
     }
@@ -268,13 +245,17 @@ function onRemoteStream(peerId, stream) {
   if (recorder && recorder.isRecording) recorder.addRemoteStream(peerId, stream);
   db.ref("presence/" + meetingId + "/" + peerId).once("value", snap => {
     const data = snap.val() || {};
+    const wasNew = !participants[peerId];
     participants[peerId] = data;
     addParticipantTile(peerId, data.displayName || "Participant", data.photoURL || "", false, stream);
+    if (wasNew && data.displayName) showToast("✦ " + data.displayName + " joined");
     updateParticipantSidebar();
   });
 }
 
 function onPeerLeft(peerId) {
+  const name = participants[peerId]?.displayName;
+  if (name) showToast("← " + name + " left the meeting");
   remoteStreams.delete(peerId);
   removeParticipantTile(peerId);
   delete participants[peerId];
@@ -298,17 +279,17 @@ function addParticipantTile(uid, name, photo, isLocal, stream) {
       <div class="tile-avatar" id="avatar-${uid}">
         ${photo ? `<img src="${photo}" alt="">` : `<span>${escapeHtml(getInitials(name))}</span>`}
       </div>
-      <div class="tile-name">${escapeHtml(name)}${isLocal ? " (You)" : ""} ${hostBadge}</div>
+      <div class="tile-name">${escapeHtml(name || "?")}${isLocal ? " (You)" : ""} ${hostBadge}</div>
       <div class="tile-status">
         <span class="status-icon" id="mic-${uid}" title="Mic">
-          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
             <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
             <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
           </svg>
         </span>
         <span class="status-icon" id="cam-${uid}" title="Camera">
-          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <polygon points="23 7 16 12 23 17 23 7"/>
             <rect x="1" y="5" width="15" height="14" rx="2"/>
           </svg>
@@ -319,22 +300,18 @@ function addParticipantTile(uid, name, photo, isLocal, stream) {
   const vidEl = document.getElementById("vid-" + uid);
   if (stream && vidEl) {
     vidEl.srcObject = stream;
-    // Attempt autoplay; if blocked, show a tap-to-unmute overlay
-    if (!isLocal) {
-      vidEl.play().catch(() => _showTapToUnmute(uid));
-    }
+    if (!isLocal) vidEl.play().catch(() => _showTapToUnmute(uid));
   }
   _setTileVideoVisible(uid, isLocal ? videoEnabled : true);
   updateParticipantCount();
 }
 
-// ── Tap-to-unmute overlay (autoplay policy workaround) ──────
 function _showTapToUnmute(uid) {
   const tile = document.getElementById("tile-" + uid);
   if (!tile || tile.querySelector(".tap-unmute")) return;
   const overlay = document.createElement("div");
   overlay.className = "tap-unmute";
-  overlay.textContent = "🔊 Tap to hear";
+  overlay.textContent = "Tap to hear";
   overlay.onclick = () => {
     const vid = document.getElementById("vid-" + uid);
     if (vid) vid.play().catch(() => {});
@@ -368,7 +345,12 @@ function setupPresenceDisplay() {
 
   presRef.on("child_added", snap => {
     const uid = snap.key, data = snap.val() || {};
-    if (uid !== currentUser.uid) { participants[uid] = data; updateParticipantSidebar(); }
+    if (uid !== currentUser.uid) {
+      const isNew = !participants[uid];
+      participants[uid] = data;
+      if (isNew && data.displayName) showToast("✦ " + data.displayName + " joined");
+      updateParticipantSidebar();
+    }
   });
 
   presRef.on("child_changed", snap => {
@@ -385,7 +367,7 @@ function setupPresenceDisplay() {
       if (data.handRaised && !existing) {
         const b = document.createElement("div");
         b.className = "hand-badge";
-        b.style.cssText = "position:absolute;top:8px;left:8px;font-size:1.1rem;background:rgba(0,0,0,.55);border-radius:6px;padding:2px 6px;z-index:2;";
+        b.style.cssText = "position:absolute;top:8px;left:8px;font-size:1rem;background:rgba(0,0,0,.55);border-radius:6px;padding:2px 6px;z-index:2;";
         b.textContent = "✋";
         tile.appendChild(b);
         showToast("✋ " + (data.displayName || "Someone") + " raised their hand");
@@ -395,7 +377,13 @@ function setupPresenceDisplay() {
   });
 
   presRef.on("child_removed", snap => {
-    if (snap.key !== currentUser.uid) { delete participants[snap.key]; updateParticipantSidebar(); }
+    const uid = snap.key;
+    if (uid !== currentUser.uid) {
+      const name = participants[uid]?.displayName;
+      if (name) showToast("← " + name + " left");
+      delete participants[uid];
+      updateParticipantSidebar();
+    }
   });
 }
 
@@ -413,12 +401,15 @@ function updateParticipantSidebar() {
 function _appendParticipantItem(container, uid, name, photo, isMe, data = {}) {
   const div = document.createElement("div");
   div.className = "participant-list-item";
-  const hostBadge = uid === meetingData.hostId ? `<span class="badge badge-accent" style="font-size:.65rem;padding:2px 7px;">Host</span>` : "";
+  const hostBadge = uid === meetingData.hostId
+    ? `<span class="badge badge-accent" style="font-size:.65rem;padding:2px 7px;">Host</span>` : "";
   div.innerHTML = `
     <div class="avatar-sm">${photo ? `<img src="${photo}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;">` : escapeHtml(getInitials(name || "?"))}</div>
     <div style="flex:1;min-width:0;">
       <div class="p-name">${escapeHtml(name || "Participant")}${isMe ? " (You)" : ""} ${hostBadge}</div>
-      <div class="p-role">${data.audio===false?"🔇":"🎤"} ${data.video===false?"📷🚫":"📷"} ${data.handRaised?"✋":""}</div>
+      <div class="p-role" style="font-size:.72rem;color:var(--text-muted);">
+        ${data.audio===false?"Muted":"Mic on"} · ${data.video===false?"Cam off":"Cam on"} ${data.handRaised?" · ✋":""}
+      </div>
     </div>`;
   container.appendChild(div);
 }
@@ -431,7 +422,7 @@ function setupTranscription() {
   transcription = new LiveTranscription(onTranscriptChunk, onTranscriptError, onTranscriptStatus);
   if (!transcription.isSupported()) {
     const panel = document.getElementById("transcriptContent");
-    if (panel) panel.innerHTML = `<div class="transcript-unsupported">⚠️ Live transcription requires Chrome or Edge.</div>`;
+    if (panel) panel.innerHTML = `<div style="padding:12px;font-size:.82rem;color:var(--text-muted);">⚠️ Live transcription requires Chrome or Edge.</div>`;
     return;
   }
   transcription.start();
@@ -456,17 +447,17 @@ function onTranscriptChunk({ type, text, fullText }) {
   } else if (type === "error") {
     _interimEl?.remove(); _interimEl = null;
     const errLine = document.createElement("p");
-    errLine.className = "transcript-error-line";
+    errLine.style.cssText = "color:var(--danger);font-size:.78rem;padding:0 12px;";
     errLine.textContent = text;
     panel.appendChild(errLine);
   }
 }
 
-function onTranscriptError(msg) { const el = document.getElementById("transcriptStatus"); if (el) el.textContent = "❌ " + msg; }
+function onTranscriptError(msg) { const el = document.getElementById("transcriptStatus"); if (el) el.textContent = "Error: " + msg; }
 function onTranscriptStatus(status) {
   const el = document.getElementById("transcriptStatus");
   if (!el) return;
-  const labels = { listening:"🔴 Live", paused:"⏸ Paused", stopped:"⬛ Stopped", silence:"🔇 Waiting…", error:"❌ Error" };
+  const labels = { listening:"🔴 Live", paused:"⏸ Paused", stopped:"⬛ Stopped", silence:"🔇 Silence…", error:"❌ Error" };
   el.textContent = labels[status] || status;
 }
 
@@ -482,7 +473,7 @@ function setupAI() {
 }
 
 function openAITerminal()  { document.getElementById("aiTerminalOverlay").classList.add("visible"); document.getElementById("aiInput")?.focus(); }
-function closeAITerminal() { document.getElementById("aiTerminalOverlay").classList.remove("visible"); aiManager.stopSpeaking(); _broadcastAIActivity(null); }
+function closeAITerminal() { document.getElementById("aiTerminalOverlay").classList.remove("visible"); aiManager?.stopSpeaking(); _broadcastAIActivity(null); }
 
 async function sendAIMessage() {
   const input = document.getElementById("aiInput");
@@ -491,55 +482,38 @@ async function sendAIMessage() {
   input.value = "";
   addAIChatBubble("user", text);
   showAITyping(true);
-
-  // Broadcast "AI thinking" to all participants
   _broadcastAIActivity({ state: "thinking", invokedBy: currentUser.displayName || "A participant" });
 
   const reply = await aiManager.chat(text, transcription?.getFullText() || "");
   aiLastResponse = reply;
   showAITyping(false);
   addAIChatBubble("ai", reply);
-
-  // Broadcast "AI speaking" to all participants
   _broadcastAIActivity({ state: "speaking", invokedBy: currentUser.displayName || "A participant", message: reply.slice(0, 120) });
-
-  aiManager.speak(reply, () => {
-    showAIStatus("");
-    _broadcastAIActivity(null); // clear broadcast when done speaking
-  });
-  showAIStatus("🔊 MeetAI is speaking…");
+  aiManager.speak(reply, () => { showAIStatus(""); _broadcastAIActivity(null); });
+  showAIStatus("MeetAI is speaking…");
 }
 
-// ── AI Activity Broadcast (Firebase RTDB) ─────────────────
 function _broadcastAIActivity(data) {
   if (!_meetingRef) return;
   if (data) {
-    _meetingRef.child("aiActivity").set({
-      ...data,
-      updatedAt: firebase.database.ServerValue.TIMESTAMP
-    }).catch(() => {});
+    _meetingRef.child("aiActivity").set({ ...data, updatedAt: firebase.database.ServerValue.TIMESTAMP }).catch(() => {});
   } else {
     _meetingRef.child("aiActivity").remove().catch(() => {});
   }
 }
 
-// ── Listen for AI Activity from other participants ─────────
 function setupAIBroadcastListener() {
   if (!_meetingRef) return;
   _meetingRef.child("aiActivity").on("value", snap => {
-    const data    = snap.val();
-    const banner  = document.getElementById("aiBroadcastBanner");
-    const bannerTxt = document.getElementById("aiBroadcastText");
-    if (!banner || !bannerTxt) return;
+    const data   = snap.val();
+    const banner = document.getElementById("aiBroadcastBanner");
+    const txt    = document.getElementById("aiBroadcastText");
+    if (!banner || !txt) return;
     if (data) {
-      let msg = "";
-      if (data.state === "thinking") {
-        msg = `🤖 MeetAI is thinking… (asked by ${escapeHtml(data.invokedBy || "a participant")})`;
-      } else if (data.state === "speaking") {
-        msg = `🔊 MeetAI is speaking (asked by ${escapeHtml(data.invokedBy || "a participant")})`;
-      }
-      bannerTxt.textContent = msg;
-      banner.style.display  = "flex";
+      txt.textContent = data.state === "thinking"
+        ? `MeetAI is thinking… (asked by ${data.invokedBy || "a participant"})`
+        : `MeetAI is speaking (asked by ${data.invokedBy || "a participant"})`;
+      banner.style.display = "flex";
     } else {
       banner.style.display = "none";
     }
@@ -551,20 +525,20 @@ function addAIChatBubble(role, text) {
   if (!log) return;
   const div = document.createElement("div");
   div.className = "ai-bubble ai-bubble-" + role;
-  div.innerHTML = `<div class="ai-bubble-label">${role === "ai" ? "🤖 MeetAI (Mistral)" : "👤 You"}</div><div class="ai-bubble-text">${_markdownToHtml(escapeHtml(text))}</div>`;
+  div.innerHTML = `<div class="ai-bubble-label">${role === "ai" ? "🤖 MeetAI" : "👤 You"}</div><div class="ai-bubble-text">${_markdownToHtml(escapeHtml(text))}</div>`;
   log.appendChild(div);
   log.scrollTop = log.scrollHeight;
 }
 
 function showAITyping(show) { const el = document.getElementById("aiTypingIndicator"); if (el) el.style.display = show ? "block" : "none"; }
 function showAIStatus(msg)  { const el = document.getElementById("aiStatusBar");       if (el) el.textContent = msg; }
-function stopAI()     { aiManager.stopSpeaking(); showAIStatus("⏹ Stopped"); _broadcastAIActivity(null); }
-function continueAI() { if (aiLastResponse) { aiManager.speak(aiLastResponse, () => showAIStatus("")); showAIStatus("🔊 Resuming…"); } }
+function stopAI()     { aiManager?.stopSpeaking(); showAIStatus("Stopped"); _broadcastAIActivity(null); }
+function continueAI() { if (aiLastResponse) { aiManager.speak(aiLastResponse, () => showAIStatus("")); showAIStatus("Resuming…"); } }
 
 async function autoSummarize() {
   const t = transcription?.getFullText() || "";
   if (t.length < 100) return;
-  const mode = document.getElementById("bookModeToggle")?.checked ? "book" : "standard";
+  const mode    = document.getElementById("bookModeToggle")?.checked ? "book" : "standard";
   const summary = await aiManager.summarize(t, mode);
   setSummaryPanel(summary);
   aiManager.saveSummaryToFirestore(summary, mode);
@@ -573,8 +547,8 @@ async function autoSummarize() {
 async function triggerSummarize() {
   const btn = document.getElementById("summarizeBtn");
   if (btn) { btn.disabled = true; btn.textContent = "Summarizing…"; }
-  const t    = transcription?.getFullText() || "";
-  const mode = document.getElementById("bookModeToggle")?.checked ? "book" : "standard";
+  const t       = transcription?.getFullText() || "";
+  const mode    = document.getElementById("bookModeToggle")?.checked ? "book" : "standard";
   const summary = await aiManager.summarize(t, mode);
   setSummaryPanel(summary);
   aiManager.saveSummaryToFirestore(summary, mode);
@@ -621,13 +595,13 @@ function _renderChatMessage(data) {
 // ── Audio / Video controls ─────────────────────────────────
 function toggleAudio() {
   audioEnabled = !audioEnabled;
-  webrtc.setAudioEnabled(audioEnabled);
+  webrtc?.setAudioEnabled(audioEnabled);
   if (typeof _syncMicIcon === "function") _syncMicIcon(audioEnabled);
 }
 
 function toggleVideo() {
   videoEnabled = !videoEnabled;
-  webrtc.setVideoEnabled(videoEnabled);
+  webrtc?.setVideoEnabled(videoEnabled);
   _setTileVideoVisible(currentUser.uid, videoEnabled);
   if (typeof _syncCamIcon === "function") _syncCamIcon(videoEnabled);
 }
@@ -647,7 +621,9 @@ function toggleAIToolsVisibility() {
     p.style.pointerEvents = aiToolsVisible ? "auto"    : "none";
   });
   const btn = document.getElementById("toggleAIVisBtn");
-  if (btn) btn.textContent = aiToolsVisible ? "🙈 Hide AI Tools" : "👁 Show AI Tools";
+  if (btn) btn.innerHTML = aiToolsVisible
+    ? `<svg width="13" height="13" id="aiVisIcon"><use href="#ic-eye-off"/></svg> Hide AI`
+    : `<svg width="13" height="13" id="aiVisIcon"><use href="#ic-eye"/></svg> Show AI`;
 }
 
 // ── Recording ──────────────────────────────────────────────
@@ -657,21 +633,21 @@ function toggleRecording() {
 }
 
 function startRecording() {
-  if (!isHost || !webrtc?.localStream) { showToast("⚠️ Camera/mic not ready yet."); return; }
+  if (!isHost || !webrtc?.localStream) { showToast("Camera/mic not ready yet."); return; }
   recorder = new MeetingRecorder();
   recorder.start(webrtc.localStream, remoteStreams);
-  const btn = document.getElementById("recordBtn");
-  if (btn) { btn.classList.add("recording"); btn.title = "Stop Recording"; }
-  showToast("🔴 Recording started");
+  document.getElementById("recordBtn")?.classList.add("recording");
+  if (typeof _syncRecordIcon === "function") _syncRecordIcon(true);
+  showToast("Recording started");
 }
 
 async function stopRecordingAndSave() {
   if (!recorder) return null;
   const blob = await recorder.stop();
   recorder   = null;
-  const btn  = document.getElementById("recordBtn");
-  if (btn) { btn.classList.remove("recording"); btn.title = "Start Recording"; }
-  showToast("⏹ Recording stopped");
+  document.getElementById("recordBtn")?.classList.remove("recording");
+  if (typeof _syncRecordIcon === "function") _syncRecordIcon(false);
+  showToast("Recording stopped");
   return blob && blob.size > 0 ? blob : null;
 }
 
@@ -687,13 +663,16 @@ function _downloadRecording(blob) {
 // ── Waiting room — host side ───────────────────────────────
 function listenForJoinRequests() {
   const reqRef = db.ref("joinRequests/" + meetingId);
-  reqRef.on("child_added", snap => {
-    const data = snap.val();
-    if (!data || data.status !== "pending") return;
-    showAdmissionRequest(snap.key, data);
-  });
   reqRef.orderByChild("status").equalTo("pending").once("value", snap => {
     snap.forEach(child => showAdmissionRequest(child.key, child.val()));
+  });
+  reqRef.on("child_added", snap => {
+    const data = snap.val();
+    if (data && data.status === "pending") showAdmissionRequest(snap.key, data);
+  });
+  reqRef.on("child_changed", snap => {
+    const data = snap.val();
+    if (data && data.status === "pending") showAdmissionRequest(snap.key, data);
   });
 }
 
@@ -705,35 +684,38 @@ function showAdmissionRequest(uid, data) {
   card.id = "req-" + uid; card.className = "admission-card";
   const photo = data.photoURL
     ? `<img src="${data.photoURL}" class="adm-photo" alt="">`
-    : `<div class="adm-photo adm-initials">${escapeHtml(getInitials(data.displayName))}</div>`;
+    : `<div class="adm-photo adm-initials">${escapeHtml(getInitials(data.displayName || "?"))}</div>`;
   card.innerHTML = `${photo}
-    <div class="adm-info"><div class="adm-name">${escapeHtml(data.displayName || "Guest")}</div><div class="adm-sub">wants to join</div></div>
+    <div class="adm-info">
+      <div class="adm-name">${escapeHtml(data.displayName || "Guest")}</div>
+      <div class="adm-sub">wants to join</div>
+    </div>
     <div class="adm-actions">
       <button class="btn btn-success btn-sm" onclick="admitGuest('${uid}')">Admit</button>
       <button class="btn btn-danger  btn-sm" onclick="declineGuest('${uid}')">Decline</button>
     </div>`;
   container.appendChild(card);
   container.style.display = "flex";
-  showToast("🔔 " + (data.displayName || "Someone") + " is waiting to join");
+  showToast("🔔 " + (data.displayName || "Someone") + " is waiting");
 }
 
 function admitGuest(uid) {
-  db.ref("joinRequests/" + meetingId + "/" + uid).update({ status: "admitted" });
+  db.ref("joinRequests/" + meetingId + "/" + uid).update({ status: "admitted" }).catch(() => {});
   document.getElementById("req-" + uid)?.remove();
   _hideQueueIfEmpty();
-  showToast("✅ Guest admitted");
+  showToast("Admitted");
 }
 
 function declineGuest(uid) {
-  db.ref("joinRequests/" + meetingId + "/" + uid).update({ status: "declined" });
+  db.ref("joinRequests/" + meetingId + "/" + uid).update({ status: "declined" }).catch(() => {});
   setTimeout(() => db.ref("joinRequests/" + meetingId + "/" + uid).remove(), 3000);
   document.getElementById("req-" + uid)?.remove();
   _hideQueueIfEmpty();
 }
 
 function _hideQueueIfEmpty() {
-  const container = document.getElementById("admissionQueue");
-  if (container && container.children.length === 0) container.style.display = "none";
+  const c = document.getElementById("admissionQueue");
+  if (c && c.children.length === 0) c.style.display = "none";
 }
 
 // ── Leave / End ────────────────────────────────────────────
@@ -748,36 +730,28 @@ async function leaveMeeting() {
 async function endMeeting() {
   if (!isHost) return;
   if (!confirm("End this meeting for everyone?")) return;
-
   let recordingBlob = null;
   if (recorder && recorder.isRecording) recordingBlob = await stopRecordingAndSave();
-
-  if (recordingBlob) {
-    _showDownloadDialog(recordingBlob, () => _finishEndMeeting());
-    return;
-  }
+  if (recordingBlob) { _showDownloadDialog(recordingBlob, () => _finishEndMeeting()); return; }
   await _finishEndMeeting();
 }
 
 function _showDownloadDialog(blob, afterCallback) {
   const overlay = document.createElement("div");
-  overlay.id = "recDownloadOverlay";
   overlay.style.cssText = "position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;";
   overlay.innerHTML = `
-    <div style="background:var(--bg-card);border:1px solid var(--border-accent);border-radius:var(--radius-lg);padding:36px 32px;max-width:420px;width:90%;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,0.6);">
+    <div style="background:var(--bg-card);border:1px solid var(--border-accent);border-radius:var(--radius-lg);padding:36px 32px;max-width:420px;width:90%;text-align:center;">
       <div style="font-size:2.5rem;margin-bottom:12px;">🎥</div>
-      <h2 style="margin-bottom:8px;font-size:1.2rem;">Save Your Recording?</h2>
-      <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:28px;line-height:1.55;">
-        You recorded this meeting. Would you like to download it as a <strong>.webm</strong> video file before ending?
-      </p>
+      <h2 style="margin-bottom:8px;">Save Recording?</h2>
+      <p style="color:var(--text-secondary);font-size:.88rem;margin-bottom:28px;">Download the recording before ending?</p>
       <div style="display:flex;gap:12px;justify-content:center;">
-        <button id="recDownloadYes" class="btn btn-primary" style="min-width:130px;">⬇️ Yes, Download</button>
-        <button id="recDownloadNo"  class="btn btn-ghost"   style="min-width:130px;">No, End Without</button>
+        <button id="_rdlYes" class="btn btn-primary" style="min-width:130px;">Download</button>
+        <button id="_rdlNo"  class="btn btn-ghost"   style="min-width:130px;">End Without</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  document.getElementById("recDownloadYes").onclick = async () => { _downloadRecording(blob); overlay.remove(); await afterCallback(); };
-  document.getElementById("recDownloadNo").onclick  = async () => { overlay.remove(); await afterCallback(); };
+  document.getElementById("_rdlYes").onclick = async () => { _downloadRecording(blob); overlay.remove(); await afterCallback(); };
+  document.getElementById("_rdlNo").onclick  = async () => { overlay.remove(); await afterCallback(); };
 }
 
 async function _finishEndMeeting() {
@@ -803,18 +777,20 @@ function startMeetingTimer() {
   setInterval(() => {
     const el = document.getElementById("meetingTimer");
     if (!el) return;
-    const s = Math.floor((Date.now() - _meetingStart) / 1000);
-    const h = Math.floor(s / 3600);
-    const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+    const s   = Math.floor((Date.now() - _meetingStart) / 1000);
+    const h   = Math.floor(s / 3600);
+    const m   = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
     const sec = String(s % 60).padStart(2, "0");
-    el.textContent = h > 0 ? h + ":" + m + ":" + sec : m + ":" + sec;
+    el.querySelector ? (el.querySelector("span") || el).textContent = h > 0 ? `${h}:${m}:${sec}` : `${m}:${sec}`
+      : el.lastChild.textContent = h > 0 ? ` ${h}:${m}:${sec}` : ` ${m}:${sec}`;
   }, 1000);
 }
 
 // ── Utilities ──────────────────────────────────────────────
 function copyMeetingLink() {
-  const url = location.origin + location.pathname.replace("meeting.html", "") + "lobby.html?id=" + meetingId;
-  navigator.clipboard.writeText(url).then(() => showToast("📋 Invite link copied!"));
+  const base = location.origin + location.pathname.replace("meeting.html", "");
+  navigator.clipboard.writeText(base + "lobby.html?id=" + meetingId)
+    .then(() => showToast("Invite link copied!"));
 }
 
 function showMeetingError(msg) {
@@ -834,11 +810,18 @@ function downloadTranscript() { _downloadText(transcription?.getFullText() || ""
 function downloadSummary()    { _downloadText(document.getElementById("summaryContent")?.innerText || "", "summary-" + meetingId + ".txt"); }
 
 function _downloadText(text, filename) {
-  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([text], {type:"text/plain"})), download: filename });
+  const a = Object.assign(document.createElement("a"), {
+    href: URL.createObjectURL(new Blob([text], { type: "text/plain" })), download: filename
+  });
   a.click();
 }
 
-function _getTimestamp() { return new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}); }
+function getInitials(name) {
+  if (!name) return "?";
+  return name.trim().split(/\s+/).map(w => w[0]).join("").toUpperCase().slice(0, 2);
+}
+
+function _getTimestamp() { return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
 
 function escapeHtml(str) {
   return (str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -847,7 +830,7 @@ function escapeHtml(str) {
 function _markdownToHtml(text) {
   return text
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.*?)\*/g, "<em>$1</em>")
-    .replace(/`(.*?)`/g, "<code>$1</code>")
-    .replace(/\n/g, "<br>");
+    .replace(/\*(.*?)\*/g,    "<em>$1</em>")
+    .replace(/`(.*?)`/g,      "<code>$1</code>")
+    .replace(/\n/g,           "<br>");
 }
