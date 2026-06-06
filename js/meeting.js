@@ -20,21 +20,22 @@ let remoteStreams   = new Map();
 let _meetingRef    = null;
 
 // ============================================================
-//  MEETING RECORDER
+//  MEETING RECORDER — with pause / resume + auto-download
 // ============================================================
 class MeetingRecorder {
   constructor() {
-    this.mediaRecorder  = null;
-    this.chunks         = [];
-    this.isRecording    = false;
-    this.canvas         = document.createElement("canvas");
-    this.canvas.width   = 1280;
-    this.canvas.height  = 720;
-    this.ctx            = this.canvas.getContext("2d");
-    this.audioCtx       = null;
-    this.dest           = null;
-    this.animId         = null;
-    this.audioSources   = new Map();
+    this.mediaRecorder = null;
+    this.chunks        = [];
+    this.isRecording   = false;
+    this.isPaused      = false;
+    this.canvas        = document.createElement("canvas");
+    this.canvas.width  = 1280;
+    this.canvas.height = 720;
+    this.ctx           = this.canvas.getContext("2d");
+    this.audioCtx      = null;
+    this.dest          = null;
+    this.animId        = null;
+    this.audioSources  = new Map();
   }
 
   start(localStream, remoteStreamMap) {
@@ -47,15 +48,31 @@ class MeetingRecorder {
     const videoTrack  = this.canvas.captureStream(30).getVideoTracks()[0];
     const audioTracks = this.dest.stream.getAudioTracks();
     const combined    = new MediaStream(audioTracks.length ? [videoTrack, audioTracks[0]] : [videoTrack]);
-
-    const mimeType = ["video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm"]
+    const mimeType    = ["video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm"]
       .find(t => MediaRecorder.isTypeSupported(t)) || "video/webm";
 
     this.chunks        = [];
     this.mediaRecorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 2_500_000 });
-    this.mediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) this.chunks.push(e.data); };
+    this.mediaRecorder.ondataavailable = e => { if (e.data?.size > 0) this.chunks.push(e.data); };
     this.mediaRecorder.start(1000);
     this.isRecording = true;
+    this.isPaused    = false;
+    return true;
+  }
+
+  // Pause — chunks collected so far are kept; clock shows paused
+  pause() {
+    if (!this.mediaRecorder || this.mediaRecorder.state !== "recording") return false;
+    this.mediaRecorder.pause();
+    this.isPaused = true;
+    return true;
+  }
+
+  // Resume — recording picks up exactly where it left off
+  resume() {
+    if (!this.mediaRecorder || this.mediaRecorder.state !== "paused") return false;
+    this.mediaRecorder.resume();
+    this.isPaused = false;
     return true;
   }
 
@@ -116,11 +133,16 @@ class MeetingRecorder {
         ctx.fillStyle = "#fff"; ctx.fillText(name, lx + 12, ly + lh - 7);
       }
     });
-    if (Math.floor(Date.now() / 700) % 2 === 0) {
+    // REC / PAUSED indicator
+    if (this.isPaused) {
+      ctx.fillStyle = "#f59e0b";
+      ctx.font = "bold 13px Inter, sans-serif";
+      ctx.fillText("⏸ PAUSED", W - 80, 27);
+    } else if (Math.floor(Date.now() / 700) % 2 === 0) {
       ctx.fillStyle = "#ef4444";
       ctx.beginPath(); ctx.arc(W - 36, 22, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.font = "bold 13px Inter, sans-serif"; ctx.fillText("REC", W - 24, 27);
     }
-    ctx.fillStyle = "#fff"; ctx.font = "bold 13px Inter, sans-serif"; ctx.fillText("REC", W - 24, 27);
   }
 
   stop() {
@@ -129,9 +151,12 @@ class MeetingRecorder {
       this.mediaRecorder.onstop = () => {
         if (this.animId) cancelAnimationFrame(this.animId);
         if (this.audioCtx) this.audioCtx.close().catch(() => {});
-        resolve(new Blob(this.chunks, { type: "video/webm" }));
         this.isRecording = false;
+        this.isPaused    = false;
+        resolve(new Blob(this.chunks, { type: "video/webm" }));
       };
+      // Resume first if paused, then stop (ensures all chunks are flushed)
+      if (this.mediaRecorder.state === "paused") this.mediaRecorder.resume();
       this.mediaRecorder.stop();
     });
   }
@@ -151,13 +176,9 @@ async function initMeeting() {
     currentUser = user;
     hideAuthSpinner();
 
-    // PHASE 1: Camera + mic — always first, never blocked by RTDB
     await setupLocalMedia();
-
-    // PHASE 2: Load meeting metadata from RTDB (never throws)
     await loadMeetingData();
 
-    // PHASE 3: Start all services, each isolated
     try { setupWebRTC();              } catch (e) { console.error("WebRTC:", e); }
     try { setupTranscription();       } catch (e) { console.error("Transcription:", e); }
     try { setupAI();                  } catch (e) { console.error("AI:", e); }
@@ -169,30 +190,18 @@ async function initMeeting() {
   });
 }
 
-// ── Load meeting data from RTDB (never throws) ─────────────
+// ── Load meeting data ─────────────────────────────────────
 async function loadMeetingData() {
   try {
     _meetingRef = db.ref("meetings/" + meetingId);
     const snap  = await _meetingRef.once("value");
-
-    if (!snap.exists()) {
-      console.warn("Meeting not found in RTDB — using defaults");
-      document.getElementById("meetingTitle").textContent = "Meeting";
-      return;
-    }
-
+    if (!snap.exists()) { document.getElementById("meetingTitle").textContent = "Meeting"; return; }
     meetingData = snap.val();
     isHost      = meetingData.hostId === currentUser.uid;
-
     document.title = (meetingData.name || "Meeting") + " — MeetAI";
     document.getElementById("meetingTitle").textContent = meetingData.name || "Meeting";
-
     _meetingRef.child("participants/" + currentUser.uid).set(true).catch(() => {});
-    if (isHost) {
-      _meetingRef.update({ status: "active", lastActivity: firebase.database.ServerValue.TIMESTAMP }).catch(() => {});
-    }
-
-    // Watch for host ending meeting
+    if (isHost) _meetingRef.update({ status: "active", lastActivity: firebase.database.ServerValue.TIMESTAMP }).catch(() => {});
     _meetingRef.on("value", snap => {
       if (!snap.exists()) return;
       const d = snap.val();
@@ -201,33 +210,24 @@ async function loadMeetingData() {
         setTimeout(() => { window.location.href = "dashboard.html"; }, 3000);
       }
     });
-
-    // Admit queue — call here so isHost is guaranteed set
-    if (isHost) {
-      try { listenForJoinRequests(); } catch (e) { console.error("JoinReq:", e); }
-    }
-
+    if (isHost) { try { listenForJoinRequests(); } catch (e) { console.error("JoinReq:", e); } }
   } catch (err) {
-    console.warn("loadMeetingData failed:", err.message);
     document.getElementById("meetingTitle").textContent = "Meeting";
   }
 }
 
-// ── Local media ────────────────────────────────────────────
+// ── Local media ───────────────────────────────────────────
 async function setupLocalMedia() {
-  webrtc = new WebRTCManager(meetingId, currentUser.uid, onRemoteStream, onPeerLeft);
+  webrtc = new WebRTCManager(meetingId, currentUser.uid, onRemoteStream, onPeerLeft, onNetworkQuality);
   try {
     const stream = await webrtc.getLocalStream(true, true);
     attachLocalStream(stream);
   } catch (_) {
     try {
       const stream = await webrtc.getLocalStream(false, true);
-      videoEnabled = false;
-      attachLocalStream(stream);
+      videoEnabled = false; attachLocalStream(stream);
       showToast("Camera unavailable — audio only.");
-    } catch (e) {
-      showMeetingError("Microphone access denied. Please allow it and reload.");
-    }
+    } catch (e) { showMeetingError("Microphone access denied. Please allow it and reload."); }
   }
 }
 
@@ -239,12 +239,12 @@ function attachLocalStream(stream) {
   if (typeof _syncMicIcon === "function") _syncMicIcon(audioEnabled);
 }
 
-// ── Remote streams ─────────────────────────────────────────
+// ── Remote streams ────────────────────────────────────────
 function onRemoteStream(peerId, stream) {
   remoteStreams.set(peerId, stream);
   if (recorder && recorder.isRecording) recorder.addRemoteStream(peerId, stream);
   db.ref("presence/" + meetingId + "/" + peerId).once("value", snap => {
-    const data = snap.val() || {};
+    const data   = snap.val() || {};
     const wasNew = !participants[peerId];
     participants[peerId] = data;
     addParticipantTile(peerId, data.displayName || "Participant", data.photoURL || "", false, stream);
@@ -263,7 +263,72 @@ function onPeerLeft(peerId) {
   updateParticipantSidebar();
 }
 
-// ── Participant grid ───────────────────────────────────────
+// ── Network quality callback ──────────────────────────────
+// Called by WebRTCManager when any peer's quality changes
+// Also called for own uid when measuring upload quality
+function onNetworkQuality(uid, quality, stats) {
+  _setTileNetworkQuality(uid, quality, stats);
+  // Own network — also show in header bar
+  if (uid === currentUser?.uid) {
+    const headerInd = document.getElementById("ownNetworkIndicator");
+    if (headerInd) {
+      headerInd.className = "own-net-indicator net-" + quality;
+      headerInd.title = quality === "reconnecting"
+        ? "Your network: reconnecting…"
+        : `Your network: ${quality}` + (stats?.rtt ? ` (${stats.rtt}ms)` : "");
+      headerInd.innerHTML = _signalBarsHtml(quality);
+    }
+    if (quality === "poor") {
+      showToast("⚠ Your network is weak — others may hear you poorly");
+    }
+  }
+}
+
+// ── Network indicator on participant tiles ────────────────
+function _setTileNetworkQuality(uid, quality, stats) {
+  const tile = document.getElementById("tile-" + uid);
+  if (!tile) return;
+
+  let indicator = tile.querySelector(".net-ind");
+  if (!indicator) {
+    indicator = document.createElement("div");
+    indicator.className = "net-ind";
+    tile.appendChild(indicator);
+  }
+  indicator.className   = "net-ind net-" + quality;
+  indicator.title       = quality === "reconnecting"
+    ? "Reconnecting…"
+    : `Network: ${quality}` + (stats?.rtt ? ` (${stats.rtt}ms RTT)` : "");
+  indicator.innerHTML   = _signalBarsHtml(quality);
+
+  // Reconnecting overlay
+  let overlay = tile.querySelector(".reconnect-overlay");
+  if (quality === "reconnecting") {
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.className = "reconnect-overlay";
+      overlay.innerHTML = `<div class="reconnect-spinner"></div><span>Reconnecting…</span>`;
+      tile.appendChild(overlay);
+    }
+  } else {
+    overlay?.remove();
+  }
+}
+
+function _signalBarsHtml(quality) {
+  const bars = quality === "reconnecting"
+    ? `<svg class="net-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+       </svg>`
+    : `<svg width="13" height="10" viewBox="0 0 13 10" fill="currentColor">
+        <rect x="0"  y="6" width="3" height="4" opacity="${quality === 'poor' || quality === 'fair' || quality === 'good' ? '1' : '0.25'}"/>
+        <rect x="5"  y="3" width="3" height="7" opacity="${quality === 'fair' || quality === 'good' ? '1' : '0.25'}"/>
+        <rect x="10" y="0" width="3" height="10" opacity="${quality === 'good' ? '1' : '0.25'}"/>
+       </svg>`;
+  return bars;
+}
+
+// ── Participant grid ──────────────────────────────────────
 function addParticipantTile(uid, name, photo, isLocal, stream) {
   const grid = document.getElementById("participantGrid");
   if (!grid) return;
@@ -272,8 +337,7 @@ function addParticipantTile(uid, name, photo, isLocal, stream) {
     tile = document.createElement("div");
     tile.id        = "tile-" + uid;
     tile.className = "participant-tile";
-    const hostBadge = (uid === meetingData.hostId)
-      ? `<span class="tile-host-badge">Host</span>` : "";
+    const hostBadge = (uid === meetingData.hostId) ? `<span class="tile-host-badge">Host</span>` : "";
     tile.innerHTML = `
       <video autoplay playsinline ${isLocal ? "muted" : ""} id="vid-${uid}"></video>
       <div class="tile-avatar" id="avatar-${uid}">
@@ -290,8 +354,7 @@ function addParticipantTile(uid, name, photo, isLocal, stream) {
         </span>
         <span class="status-icon" id="cam-${uid}" title="Camera">
           <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <polygon points="23 7 16 12 23 17 23 7"/>
-            <rect x="1" y="5" width="15" height="14" rx="2"/>
+            <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>
           </svg>
         </span>
       </div>`;
@@ -310,20 +373,12 @@ function _showTapToUnmute(uid) {
   const tile = document.getElementById("tile-" + uid);
   if (!tile || tile.querySelector(".tap-unmute")) return;
   const overlay = document.createElement("div");
-  overlay.className = "tap-unmute";
-  overlay.textContent = "Tap to hear";
-  overlay.onclick = () => {
-    const vid = document.getElementById("vid-" + uid);
-    if (vid) vid.play().catch(() => {});
-    overlay.remove();
-  };
+  overlay.className = "tap-unmute"; overlay.textContent = "Tap to hear";
+  overlay.onclick = () => { document.getElementById("vid-" + uid)?.play().catch(() => {}); overlay.remove(); };
   tile.appendChild(overlay);
 }
 
-function removeParticipantTile(uid) {
-  document.getElementById("tile-" + uid)?.remove();
-  updateParticipantCount();
-}
+function removeParticipantTile(uid)  { document.getElementById("tile-" + uid)?.remove(); updateParticipantCount(); }
 
 function _setTileVideoVisible(uid, visible) {
   const vid    = document.getElementById("vid-" + uid);
@@ -334,12 +389,11 @@ function _setTileVideoVisible(uid, visible) {
 }
 
 function updateParticipantCount() {
-  const count = document.querySelectorAll(".participant-tile").length;
-  const el    = document.getElementById("participantCount");
-  if (el) el.textContent = count;
+  const el = document.getElementById("participantCount");
+  if (el) el.textContent = document.querySelectorAll(".participant-tile").length;
 }
 
-// ── Presence live-sync ─────────────────────────────────────
+// ── Presence live-sync ────────────────────────────────────
 function setupPresenceDisplay() {
   const presRef = db.ref("presence/" + meetingId);
 
@@ -349,6 +403,8 @@ function setupPresenceDisplay() {
       const isNew = !participants[uid];
       participants[uid] = data;
       if (isNew && data.displayName) showToast("✦ " + data.displayName + " joined");
+      // Apply saved network quality if present
+      if (data.networkQuality) _setTileNetworkQuality(uid, data.networkQuality, null);
       updateParticipantSidebar();
     }
   });
@@ -361,6 +417,7 @@ function setupPresenceDisplay() {
     if (micIcon) micIcon.style.opacity = data.audio === false ? "0.3" : "1";
     if (camIcon) camIcon.style.opacity = data.video === false ? "0.3" : "1";
     _setTileVideoVisible(uid, data.video !== false);
+    if (data.networkQuality) _setTileNetworkQuality(uid, data.networkQuality, null);
     const tile = document.getElementById("tile-" + uid);
     if (tile) {
       const existing = tile.querySelector(".hand-badge");
@@ -368,8 +425,7 @@ function setupPresenceDisplay() {
         const b = document.createElement("div");
         b.className = "hand-badge";
         b.style.cssText = "position:absolute;top:8px;left:8px;font-size:1rem;background:rgba(0,0,0,.55);border-radius:6px;padding:2px 6px;z-index:2;";
-        b.textContent = "✋";
-        tile.appendChild(b);
+        b.textContent = "✋"; tile.appendChild(b);
         showToast("✋ " + (data.displayName || "Someone") + " raised their hand");
       } else if (!data.handRaised && existing) { existing.remove(); }
     }
@@ -381,13 +437,12 @@ function setupPresenceDisplay() {
     if (uid !== currentUser.uid) {
       const name = participants[uid]?.displayName;
       if (name) showToast("← " + name + " left");
-      delete participants[uid];
-      updateParticipantSidebar();
+      delete participants[uid]; updateParticipantSidebar();
     }
   });
 }
 
-// ── Sidebar people list ────────────────────────────────────
+// ── Sidebar people list ───────────────────────────────────
 function updateParticipantSidebar() {
   const list = document.getElementById("participantsList");
   if (!list) return;
@@ -398,202 +453,144 @@ function updateParticipantSidebar() {
   });
 }
 
-function _appendParticipantItem(container, uid, name, photo, isMe, data = {}) {
-  const div = document.createElement("div");
-  div.className = "participant-list-item";
-  const hostBadge = uid === meetingData.hostId
-    ? `<span class="badge badge-accent" style="font-size:.65rem;padding:2px 7px;">Host</span>` : "";
-  div.innerHTML = `
-    <div class="avatar-sm">${photo ? `<img src="${photo}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;">` : escapeHtml(getInitials(name || "?"))}</div>
-    <div style="flex:1;min-width:0;">
-      <div class="p-name">${escapeHtml(name || "Participant")}${isMe ? " (You)" : ""} ${hostBadge}</div>
-      <div class="p-role" style="font-size:.72rem;color:var(--text-muted);">
-        ${data.audio===false?"Muted":"Mic on"} · ${data.video===false?"Cam off":"Cam on"} ${data.handRaised?" · ✋":""}
-      </div>
-    </div>`;
-  container.appendChild(div);
+function _appendParticipantItem(list, uid, name, photo, isLocal, data = {}) {
+  const item = document.createElement("div");
+  item.className = "participant-item";
+  const initials = escapeHtml(getInitials(name || "?"));
+  const avatar   = photo
+    ? `<img src="${escapeHtml(photo)}" class="p-avatar-img" alt="">`
+    : `<div class="p-avatar-initials">${initials}</div>`;
+  const netQ = data.networkQuality || "good";
+  const netBadge = netQ !== "good"
+    ? `<span class="p-net-badge net-${netQ}" title="Network: ${netQ}">${_signalBarsHtml(netQ)}</span>`
+    : "";
+  item.innerHTML = `
+    <div class="p-avatar">${avatar}</div>
+    <div class="p-info">
+      <div class="p-name">${escapeHtml(name || "Participant")}${isLocal ? " <span class='p-you'>(You)</span>" : ""}</div>
+      <div class="p-sub">${isLocal ? "Host" : (data.audio === false ? "Muted" : "")}</div>
+    </div>
+    ${netBadge}
+    ${isLocal ? "" : `<button class="btn-icon p-mute-btn" onclick="hostMuteParticipant('${uid}')" title="Mute">
+      <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+      </svg>
+    </button>`}`;
+  list.appendChild(item);
 }
 
-// ── WebRTC ─────────────────────────────────────────────────
-function setupWebRTC() { webrtc.joinRoom(); }
+// ── WebRTC setup ──────────────────────────────────────────
+function setupWebRTC() {
+  if (!webrtc) return;
+  webrtc.joinRoom();
+}
 
-// ── Transcription ──────────────────────────────────────────
+// ── Transcription ─────────────────────────────────────────
 function setupTranscription() {
-  transcription = new LiveTranscription(onTranscriptChunk, onTranscriptError, onTranscriptStatus);
-  if (!transcription.isSupported()) {
-    const panel = document.getElementById("transcriptContent");
-    if (panel) panel.innerHTML = `<div style="padding:12px;font-size:.82rem;color:var(--text-muted);">⚠️ Live transcription requires Chrome or Edge.</div>`;
-    return;
-  }
-  transcription.start();
+  if (typeof LiveTranscription === "undefined") return;
+  transcription = new LiveTranscription(
+    chunk => _onTranscriptChunk(chunk),
+    err   => console.warn("Transcription:", err),
+    status => _onTranscriptStatus(status)
+  );
+  if (transcription.isSupported()) transcription.start();
 }
 
-let _interimEl = null, _finalLineCount = 0;
-
-function onTranscriptChunk({ type, text, fullText }) {
-  const panel = document.getElementById("transcriptContent");
-  if (!panel) return;
-  if (type === "interim") {
-    if (!_interimEl) { _interimEl = document.createElement("span"); _interimEl.className = "transcript-interim"; panel.appendChild(_interimEl); }
-    _interimEl.textContent = text;
-  } else if (type === "final") {
+let _interimEl = null;
+function _onTranscriptChunk({ type, text, fullText }) {
+  const liveEl = document.getElementById("liveTranscript");
+  if (!liveEl) return;
+  if (type === "final") {
     _interimEl?.remove(); _interimEl = null;
-    const line = document.createElement("p");
-    line.className = "transcript-line";
-    line.innerHTML = `<span class="ts-time">${_getTimestamp()}</span> ${escapeHtml(text)}`;
-    panel.appendChild(line);
-    panel.scrollTop = panel.scrollHeight;
-    if (++_finalLineCount % 10 === 0) _persistTranscript(fullText);
-  } else if (type === "error") {
-    _interimEl?.remove(); _interimEl = null;
-    const errLine = document.createElement("p");
-    errLine.style.cssText = "color:var(--danger);font-size:.78rem;padding:0 12px;";
-    errLine.textContent = text;
-    panel.appendChild(errLine);
-  }
-}
-
-function onTranscriptError(msg) { const el = document.getElementById("transcriptStatus"); if (el) el.textContent = "Error: " + msg; }
-function onTranscriptStatus(status) {
-  const el = document.getElementById("transcriptStatus");
-  if (!el) return;
-  const labels = { listening:"🔴 Live", paused:"⏸ Paused", stopped:"⬛ Stopped", silence:"🔇 Silence…", error:"❌ Error" };
-  el.textContent = labels[status] || status;
-}
-
-async function _persistTranscript(fullText) {
-  if (!fullText || !meetingId || !_meetingRef) return;
-  try { await _meetingRef.update({ transcript: fullText }); } catch (_) {}
-}
-
-// ── AI ─────────────────────────────────────────────────────
-function setupAI() {
-  aiManager = new AIManager(meetingId, currentUser.uid);
-  setInterval(autoSummarize, 5 * 60 * 1000);
-}
-
-function openAITerminal()  { document.getElementById("aiTerminalOverlay").classList.add("visible"); document.getElementById("aiInput")?.focus(); }
-function closeAITerminal() { document.getElementById("aiTerminalOverlay").classList.remove("visible"); aiManager?.stopSpeaking(); _broadcastAIActivity(null); }
-
-async function sendAIMessage() {
-  const input = document.getElementById("aiInput");
-  const text  = (input?.value || "").trim();
-  if (!text) return;
-  input.value = "";
-  addAIChatBubble("user", text);
-  showAITyping(true);
-  _broadcastAIActivity({ state: "thinking", invokedBy: currentUser.displayName || "A participant" });
-
-  const reply = await aiManager.chat(text, transcription?.getFullText() || "");
-  aiLastResponse = reply;
-  showAITyping(false);
-  addAIChatBubble("ai", reply);
-  _broadcastAIActivity({ state: "speaking", invokedBy: currentUser.displayName || "A participant", message: reply.slice(0, 120) });
-  aiManager.speak(reply, () => { showAIStatus(""); _broadcastAIActivity(null); });
-  showAIStatus("MeetAI is speaking…");
-}
-
-function _broadcastAIActivity(data) {
-  if (!_meetingRef) return;
-  if (data) {
-    _meetingRef.child("aiActivity").set({ ...data, updatedAt: firebase.database.ServerValue.TIMESTAMP }).catch(() => {});
-  } else {
-    _meetingRef.child("aiActivity").remove().catch(() => {});
-  }
-}
-
-function setupAIBroadcastListener() {
-  if (!_meetingRef) return;
-  _meetingRef.child("aiActivity").on("value", snap => {
-    const data   = snap.val();
-    const banner = document.getElementById("aiBroadcastBanner");
-    const txt    = document.getElementById("aiBroadcastText");
-    if (!banner || !txt) return;
-    if (data) {
-      txt.textContent = data.state === "thinking"
-        ? `MeetAI is thinking… (asked by ${data.invokedBy || "a participant"})`
-        : `MeetAI is speaking (asked by ${data.invokedBy || "a participant"})`;
-      banner.style.display = "flex";
-    } else {
-      banner.style.display = "none";
+    const p = document.createElement("p");
+    const ts = document.createElement("span");
+    ts.className = "ts"; ts.textContent = _getTimestamp();
+    p.appendChild(ts); p.append(" " + text);
+    liveEl.appendChild(p);
+    liveEl.scrollTop = liveEl.scrollHeight;
+  } else if (type === "interim") {
+    if (!_interimEl) {
+      _interimEl = document.createElement("p");
+      _interimEl.className = "interim"; liveEl.appendChild(_interimEl);
     }
+    _interimEl.textContent = text;
+    liveEl.scrollTop = liveEl.scrollHeight;
+  }
+}
+
+function _onTranscriptStatus(status) {
+  const el = document.getElementById("transcriptStatus");
+  if (el) {
+    el.textContent = status === "listening" ? "● Live" : status === "silence" ? "◌ Listening…" : status;
+    el.className   = "transcript-status ts-" + status;
+  }
+}
+
+// ── AI ────────────────────────────────────────────────────
+function setupAI() {
+  if (typeof AIManager === "undefined") return;
+  aiManager = new AIManager(meetingId, currentUser.uid, isHost, resp => {
+    aiLastResponse = resp;
+    const el = document.getElementById("aiResponse");
+    if (el) el.innerHTML = _markdownToHtml(escapeHtml(resp));
   });
 }
 
-function addAIChatBubble(role, text) {
-  const log = document.getElementById("aiChatLog");
-  if (!log) return;
-  const div = document.createElement("div");
-  div.className = "ai-bubble ai-bubble-" + role;
-  div.innerHTML = `<div class="ai-bubble-label">${role === "ai" ? "🤖 MeetAI" : "👤 You"}</div><div class="ai-bubble-text">${_markdownToHtml(escapeHtml(text))}</div>`;
-  log.appendChild(div);
-  log.scrollTop = log.scrollHeight;
-}
-
-function showAITyping(show) { const el = document.getElementById("aiTypingIndicator"); if (el) el.style.display = show ? "block" : "none"; }
-function showAIStatus(msg)  { const el = document.getElementById("aiStatusBar");       if (el) el.textContent = msg; }
-function stopAI()     { aiManager?.stopSpeaking(); showAIStatus("Stopped"); _broadcastAIActivity(null); }
-function continueAI() { if (aiLastResponse) { aiManager.speak(aiLastResponse, () => showAIStatus("")); showAIStatus("Resuming…"); } }
-
-async function autoSummarize() {
-  const t = transcription?.getFullText() || "";
-  if (t.length < 100) return;
-  const mode    = document.getElementById("bookModeToggle")?.checked ? "book" : "standard";
-  const summary = await aiManager.summarize(t, mode);
-  setSummaryPanel(summary);
-  aiManager.saveSummaryToFirestore(summary, mode);
-}
-
-async function triggerSummarize() {
-  const btn = document.getElementById("summarizeBtn");
-  if (btn) { btn.disabled = true; btn.textContent = "Summarizing…"; }
-  const t       = transcription?.getFullText() || "";
-  const mode    = document.getElementById("bookModeToggle")?.checked ? "book" : "standard";
-  const summary = await aiManager.summarize(t, mode);
-  setSummaryPanel(summary);
-  aiManager.saveSummaryToFirestore(summary, mode);
-  if (btn) { btn.disabled = false; btn.textContent = "Summarize Now"; }
-}
-
-function setSummaryPanel(text) {
-  const el = document.getElementById("summaryContent");
-  if (el) el.innerHTML = _markdownToHtml(escapeHtml(text));
-}
-
-// ── Chat (Realtime Database) ───────────────────────────────
+// ── Chat ──────────────────────────────────────────────────
 function setupChat() {
-  const chatRef = db.ref("chat/" + meetingId);
-  chatRef.limitToLast(200).on("child_added", snap => {
-    const data = snap.val();
-    if (data) _renderChatMessage(data);
+  const chatRef  = db.ref("chat/" + meetingId);
+  const chatList = document.getElementById("chatMessages");
+  if (!chatList) return;
+  chatRef.limitToLast(50).on("child_added", snap => {
+    const msg = snap.val();
+    if (!msg) return;
+    const isMe = msg.uid === currentUser.uid;
+    const div  = document.createElement("div");
+    div.className = "chat-msg" + (isMe ? " chat-me" : "");
+    div.innerHTML = `
+      <div class="chat-sender">${escapeHtml(isMe ? "You" : (msg.displayName || "Participant"))}</div>
+      <div class="chat-bubble">${escapeHtml(msg.text)}</div>
+      <div class="chat-time">${_getTimestamp()}</div>`;
+    chatList.appendChild(div);
+    chatList.scrollTop = chatList.scrollHeight;
   });
 }
 
-async function sendChatMessage() {
+function sendChatMessage() {
   const input = document.getElementById("chatInput");
-  const text  = (input?.value || "").trim();
+  if (!input) return;
+  const text = input.value.trim();
   if (!text) return;
+  db.ref("chat/" + meetingId).push({
+    uid: currentUser.uid, displayName: currentUser.displayName || "You",
+    text, ts: firebase.database.ServerValue.TIMESTAMP
+  });
   input.value = "";
-  await db.ref("chat/" + meetingId).push({
-    uid:         currentUser.uid,
-    displayName: currentUser.displayName || "Anonymous",
-    text,
-    ts:          firebase.database.ServerValue.TIMESTAMP
+}
+
+// ── AI broadcast ──────────────────────────────────────────
+function setupAIBroadcastListener() {
+  db.ref("aiActivity/" + meetingId).on("value", snap => {
+    const data   = snap.val();
+    const banner = document.getElementById("aiActivityBanner");
+    if (!data || !data.active || !data.uid) { if (banner) banner.style.display = "none"; return; }
+    if (data.uid === currentUser.uid)      { if (banner) banner.style.display = "none"; return; }
+    db.ref("presence/" + meetingId + "/" + data.uid).once("value", pSnap => {
+      const name = pSnap.val()?.displayName || "Someone";
+      if (banner) { banner.textContent = "✦ " + name + " is using AI…"; banner.style.display = "flex"; }
+    });
   });
 }
 
-function _renderChatMessage(data) {
-  const log = document.getElementById("chatLog");
-  if (!log) return;
-  const div = document.createElement("div");
-  div.className = "chat-msg " + (data.uid === currentUser.uid ? "chat-mine" : "");
-  div.innerHTML = `<span class="chat-name">${escapeHtml(data.displayName)}</span><span class="chat-text">${escapeHtml(data.text)}</span>`;
-  log.appendChild(div);
-  log.scrollTop = log.scrollHeight;
+function _broadcastAIActivity(active) {
+  db.ref("aiActivity/" + meetingId).set(
+    active ? { uid: currentUser.uid, active: true, ts: firebase.database.ServerValue.TIMESTAMP } : null
+  ).catch(() => {});
 }
 
-// ── Audio / Video controls ─────────────────────────────────
-function toggleAudio() {
+// ── Controls ──────────────────────────────────────────────
+function toggleMic() {
   audioEnabled = !audioEnabled;
   webrtc?.setAudioEnabled(audioEnabled);
   if (typeof _syncMicIcon === "function") _syncMicIcon(audioEnabled);
@@ -606,12 +603,14 @@ function toggleVideo() {
   if (typeof _syncCamIcon === "function") _syncCamIcon(videoEnabled);
 }
 
-// ── Host controls ──────────────────────────────────────────
+// ── Host controls ─────────────────────────────────────────
 function updateHostControls() {
   const panel   = document.getElementById("hostControls");
   const recWrap = document.getElementById("recordWrap");
-  if (panel)   panel.style.display   = isHost ? "flex" : "none";
-  if (recWrap) recWrap.style.display = isHost ? "flex" : "none";
+  const recPause = document.getElementById("pauseRecordWrap");
+  if (panel)    panel.style.display    = isHost ? "flex" : "none";
+  if (recWrap)  recWrap.style.display  = isHost ? "flex" : "none";
+  if (recPause) recPause.style.display = "none"; // only show when recording
 }
 
 function toggleAIToolsVisibility() {
@@ -626,7 +625,7 @@ function toggleAIToolsVisibility() {
     : `<svg width="13" height="13" id="aiVisIcon"><use href="#ic-eye"/></svg> Show AI`;
 }
 
-// ── Recording ──────────────────────────────────────────────
+// ── Recording ─────────────────────────────────────────────
 function toggleRecording() {
   if (!recorder || !recorder.isRecording) startRecording();
   else stopRecordingAndSave();
@@ -636,19 +635,55 @@ function startRecording() {
   if (!isHost || !webrtc?.localStream) { showToast("Camera/mic not ready yet."); return; }
   recorder = new MeetingRecorder();
   recorder.start(webrtc.localStream, remoteStreams);
-  document.getElementById("recordBtn")?.classList.add("recording");
   if (typeof _syncRecordIcon === "function") _syncRecordIcon(true);
-  showToast("Recording started");
+  // Show pause button
+  const pw = document.getElementById("pauseRecordWrap");
+  if (pw) pw.style.display = "flex";
+  showToast("● Recording started");
 }
 
+// Stop recording → immediately download the file (no dialog)
 async function stopRecordingAndSave() {
   if (!recorder) return null;
   const blob = await recorder.stop();
-  recorder   = null;
-  document.getElementById("recordBtn")?.classList.remove("recording");
+  recorder = null;
   if (typeof _syncRecordIcon === "function") _syncRecordIcon(false);
+  _syncPauseIcon(false, false);
+  const pw = document.getElementById("pauseRecordWrap");
+  if (pw) pw.style.display = "none";
+  if (blob && blob.size > 0) {
+    _downloadRecording(blob);   // ← auto-download immediately, no dialog
+    showToast("Recording saved & downloading…");
+    return blob;
+  }
   showToast("Recording stopped");
-  return blob && blob.size > 0 ? blob : null;
+  return null;
+}
+
+// Pause / resume toggle
+function togglePauseRecording() {
+  if (!recorder || !recorder.isRecording) return;
+  if (recorder.isPaused) {
+    recorder.resume();
+    _syncPauseIcon(true, false);
+    showToast("▶ Recording resumed");
+  } else {
+    recorder.pause();
+    _syncPauseIcon(true, true);
+    showToast("⏸ Recording paused");
+  }
+}
+
+function _syncPauseIcon(recording, paused) {
+  const btn = document.getElementById("pauseRecordBtn");
+  const lbl = document.getElementById("pauseRecordLabel");
+  if (!btn) return;
+  btn.innerHTML = paused
+    ? `<svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>`
+    : `<svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
+  btn.title = paused ? "Resume Recording" : "Pause Recording";
+  btn.classList.toggle("paused", paused);
+  if (lbl) lbl.textContent = paused ? "Resume" : "Pause";
 }
 
 function _downloadRecording(blob) {
@@ -660,20 +695,12 @@ function _downloadRecording(blob) {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
-// ── Waiting room — host side ───────────────────────────────
+// ── Waiting room ──────────────────────────────────────────
 function listenForJoinRequests() {
   const reqRef = db.ref("joinRequests/" + meetingId);
-  reqRef.orderByChild("status").equalTo("pending").once("value", snap => {
-    snap.forEach(child => showAdmissionRequest(child.key, child.val()));
-  });
-  reqRef.on("child_added", snap => {
-    const data = snap.val();
-    if (data && data.status === "pending") showAdmissionRequest(snap.key, data);
-  });
-  reqRef.on("child_changed", snap => {
-    const data = snap.val();
-    if (data && data.status === "pending") showAdmissionRequest(snap.key, data);
-  });
+  reqRef.orderByChild("status").equalTo("pending").once("value", snap => { snap.forEach(c => showAdmissionRequest(c.key, c.val())); });
+  reqRef.on("child_added",   snap => { const d = snap.val(); if (d?.status === "pending") showAdmissionRequest(snap.key, d); });
+  reqRef.on("child_changed", snap => { const d = snap.val(); if (d?.status === "pending") showAdmissionRequest(snap.key, d); });
 }
 
 function showAdmissionRequest(uid, data) {
@@ -686,42 +713,39 @@ function showAdmissionRequest(uid, data) {
     ? `<img src="${data.photoURL}" class="adm-photo" alt="">`
     : `<div class="adm-photo adm-initials">${escapeHtml(getInitials(data.displayName || "?"))}</div>`;
   card.innerHTML = `${photo}
-    <div class="adm-info">
-      <div class="adm-name">${escapeHtml(data.displayName || "Guest")}</div>
-      <div class="adm-sub">wants to join</div>
-    </div>
+    <div class="adm-info"><div class="adm-name">${escapeHtml(data.displayName || "Guest")}</div><div class="adm-sub">wants to join</div></div>
     <div class="adm-actions">
       <button class="btn btn-success btn-sm" onclick="admitGuest('${uid}')">Admit</button>
       <button class="btn btn-danger  btn-sm" onclick="declineGuest('${uid}')">Decline</button>
     </div>`;
-  container.appendChild(card);
-  container.style.display = "flex";
+  container.appendChild(card); container.style.display = "flex";
   showToast("🔔 " + (data.displayName || "Someone") + " is waiting");
 }
 
 function admitGuest(uid) {
   db.ref("joinRequests/" + meetingId + "/" + uid).update({ status: "admitted" }).catch(() => {});
-  document.getElementById("req-" + uid)?.remove();
-  _hideQueueIfEmpty();
-  showToast("Admitted");
+  document.getElementById("req-" + uid)?.remove(); _hideQueueIfEmpty(); showToast("Admitted");
 }
-
 function declineGuest(uid) {
   db.ref("joinRequests/" + meetingId + "/" + uid).update({ status: "declined" }).catch(() => {});
   setTimeout(() => db.ref("joinRequests/" + meetingId + "/" + uid).remove(), 3000);
-  document.getElementById("req-" + uid)?.remove();
-  _hideQueueIfEmpty();
+  document.getElementById("req-" + uid)?.remove(); _hideQueueIfEmpty();
+}
+function _hideQueueIfEmpty() { const c = document.getElementById("admissionQueue"); if (c?.children.length === 0) c.style.display = "none"; }
+
+function hostMuteParticipant(uid) {
+  db.ref("presence/" + meetingId + "/" + uid + "/forceMuted").set(true).catch(() => {});
+  showToast("Muted participant");
 }
 
-function _hideQueueIfEmpty() {
-  const c = document.getElementById("admissionQueue");
-  if (c && c.children.length === 0) c.style.display = "none";
-}
-
-// ── Leave / End ────────────────────────────────────────────
+// ── Leave / End ───────────────────────────────────────────
 async function leaveMeeting() {
   if (!confirm("Leave this meeting?")) return;
-  if (recorder && recorder.isRecording) await recorder.stop();
+  if (recorder && recorder.isRecording) {
+    const blob = await recorder.stop();
+    if (blob && blob.size > 0) _downloadRecording(blob);
+    recorder = null;
+  }
   _broadcastAIActivity(null);
   await _cleanup();
   window.location.href = "dashboard.html";
@@ -730,28 +754,13 @@ async function leaveMeeting() {
 async function endMeeting() {
   if (!isHost) return;
   if (!confirm("End this meeting for everyone?")) return;
-  let recordingBlob = null;
-  if (recorder && recorder.isRecording) recordingBlob = await stopRecordingAndSave();
-  if (recordingBlob) { _showDownloadDialog(recordingBlob, () => _finishEndMeeting()); return; }
+  // Auto-download any active recording first
+  if (recorder && recorder.isRecording) {
+    const blob = await recorder.stop();
+    recorder   = null;
+    if (blob && blob.size > 0) _downloadRecording(blob);
+  }
   await _finishEndMeeting();
-}
-
-function _showDownloadDialog(blob, afterCallback) {
-  const overlay = document.createElement("div");
-  overlay.style.cssText = "position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;";
-  overlay.innerHTML = `
-    <div style="background:var(--bg-card);border:1px solid var(--border-accent);border-radius:var(--radius-lg);padding:36px 32px;max-width:420px;width:90%;text-align:center;">
-      <div style="font-size:2.5rem;margin-bottom:12px;">🎥</div>
-      <h2 style="margin-bottom:8px;">Save Recording?</h2>
-      <p style="color:var(--text-secondary);font-size:.88rem;margin-bottom:28px;">Download the recording before ending?</p>
-      <div style="display:flex;gap:12px;justify-content:center;">
-        <button id="_rdlYes" class="btn btn-primary" style="min-width:130px;">Download</button>
-        <button id="_rdlNo"  class="btn btn-ghost"   style="min-width:130px;">End Without</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-  document.getElementById("_rdlYes").onclick = async () => { _downloadRecording(blob); overlay.remove(); await afterCallback(); };
-  document.getElementById("_rdlNo").onclick  = async () => { overlay.remove(); await afterCallback(); };
 }
 
 async function _finishEndMeeting() {
@@ -771,7 +780,7 @@ async function _cleanup() {
   if (webrtc) await webrtc.leave();
 }
 
-// ── Timer ──────────────────────────────────────────────────
+// ── Timer ─────────────────────────────────────────────────
 let _meetingStart = Date.now();
 function startMeetingTimer() {
   setInterval(() => {
@@ -781,22 +790,18 @@ function startMeetingTimer() {
     const h   = Math.floor(s / 3600);
     const m   = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
     const sec = String(s % 60).padStart(2, "0");
-    el.querySelector ? (el.querySelector("span") || el).textContent = h > 0 ? `${h}:${m}:${sec}` : `${m}:${sec}`
-      : el.lastChild.textContent = h > 0 ? ` ${h}:${m}:${sec}` : ` ${m}:${sec}`;
+    const display = h > 0 ? `${h}:${m}:${sec}` : `${m}:${sec}`;
+    (el.querySelector("span") || el).textContent = display;
   }, 1000);
 }
 
-// ── Utilities ──────────────────────────────────────────────
+// ── Utilities ─────────────────────────────────────────────
 function copyMeetingLink() {
   const base = location.origin + location.pathname.replace("meeting.html", "");
-  navigator.clipboard.writeText(base + "lobby.html?id=" + meetingId)
-    .then(() => showToast("Invite link copied!"));
+  navigator.clipboard.writeText(base + "lobby.html?id=" + meetingId).then(() => showToast("Invite link copied!"));
 }
 
-function showMeetingError(msg) {
-  const el = document.getElementById("meetingError");
-  if (el) { el.textContent = msg; el.style.display = "block"; }
-}
+function showMeetingError(msg) { const el = document.getElementById("meetingError"); if (el) { el.textContent = msg; el.style.display = "block"; } }
 
 function showToast(msg) {
   document.querySelectorAll(".toast").forEach(t => t.remove());
@@ -808,29 +813,21 @@ function showToast(msg) {
 
 function downloadTranscript() { _downloadText(transcription?.getFullText() || "", "transcript-" + meetingId + ".txt"); }
 function downloadSummary()    { _downloadText(document.getElementById("summaryContent")?.innerText || "", "summary-" + meetingId + ".txt"); }
-
 function _downloadText(text, filename) {
-  const a = Object.assign(document.createElement("a"), {
+  Object.assign(document.createElement("a"), {
     href: URL.createObjectURL(new Blob([text], { type: "text/plain" })), download: filename
-  });
-  a.click();
+  }).click();
 }
 
 function getInitials(name) {
   if (!name) return "?";
   return name.trim().split(/\s+/).map(w => w[0]).join("").toUpperCase().slice(0, 2);
 }
-
 function _getTimestamp() { return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
-
 function escapeHtml(str) {
   return (str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
-
 function _markdownToHtml(text) {
-  return text
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.*?)\*/g,    "<em>$1</em>")
-    .replace(/`(.*?)`/g,      "<code>$1</code>")
-    .replace(/\n/g,           "<br>");
+  return text.replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>").replace(/\*(.*?)\*/g,"<em>$1</em>")
+             .replace(/`(.*?)`/g,"<code>$1</code>").replace(/\n/g,"<br>");
 }
