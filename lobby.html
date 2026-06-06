@@ -3,122 +3,110 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MeetAI — Waiting Room</title>
+  <title>MeetAI — Join Meeting</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
   <style>
-    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: var(--bg-primary); }
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:var(--bg-primary); }
 
     .lobby-wrap {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 32px;
-      width: 100%;
-      max-width: 480px;
-      padding: 24px;
+      display:flex; flex-direction:column; align-items:center;
+      gap:28px; width:100%; max-width:500px; padding:24px;
     }
-
-    .lobby-logo { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.5px; }
-    .lobby-logo span { color: var(--accent); }
+    .lobby-logo { font-size:1.5rem; font-weight:800; letter-spacing:-.5px; }
+    .lobby-logo span { color:var(--accent); }
 
     .lobby-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 40px 36px;
-      width: 100%;
-      text-align: center;
-      box-shadow: var(--shadow);
+      background:var(--bg-card); border:1px solid var(--border);
+      border-radius:var(--radius-lg); padding:36px 32px;
+      width:100%; box-shadow:var(--shadow);
     }
 
+    /* ── Step 1: Name ──────────────────────────────── */
+    .name-step { text-align:center; }
+    .name-step h2 { font-size:1.25rem; font-weight:700; margin-bottom:6px; }
+    .name-step p  { font-size:.88rem; color:var(--text-secondary); margin-bottom:24px; }
+    .name-input-wrap { display:flex; gap:10px; }
+    .name-input-wrap .input { flex:1; font-size:1rem; }
+
+    /* ── Step 2: Device test + waiting ────────────── */
+    .device-step { display:flex; flex-direction:column; gap:20px; }
+
+    .preview-section {
+      display:flex; gap:16px; align-items:flex-start;
+    }
     .preview-wrap {
-      width: 240px; height: 160px;
-      background: #000;
-      border-radius: var(--radius);
-      overflow: hidden;
-      margin: 0 auto 24px;
-      position: relative;
-      border: 2px solid var(--border);
+      width:200px; height:140px; flex-shrink:0;
+      background:#000; border-radius:var(--radius);
+      overflow:hidden; position:relative; border:2px solid var(--border);
     }
-    .preview-wrap video { width: 100%; height: 100%; object-fit: cover; }
-    .preview-wrap .avatar-preview {
-      position: absolute; inset: 0;
-      display: flex; align-items: center; justify-content: center;
-      background: linear-gradient(135deg, #1a1e2a, #0d0f14);
-      font-size: 3rem; font-weight: 700; color: var(--accent);
-    }
-    .preview-controls {
-      display: flex; justify-content: center; gap: 12px; margin-bottom: 24px;
-    }
-    .preview-btn {
-      width: 40px; height: 40px; border-radius: 50%;
-      border: 1px solid var(--border); background: var(--bg-secondary);
-      color: var(--text-primary); font-size: 1rem;
-      cursor: pointer; transition: background var(--transition);
-      display: flex; align-items: center; justify-content: center;
-    }
-    .preview-btn:hover { background: rgba(255,255,255,0.1); }
-    .preview-btn.off { background: var(--danger); border-color: var(--danger); }
-
-    .lobby-status {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
+    .preview-wrap video { width:100%; height:100%; object-fit:cover; display:block; }
+    .preview-avatar {
+      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+      background:linear-gradient(135deg,#1a1e2a,#0d0f14);
+      font-size:2.5rem; font-weight:700; color:var(--accent);
     }
 
-    .status-ring {
-      width: 72px; height: 72px;
-      border-radius: 50%;
-      border: 3px solid var(--border);
-      border-top-color: var(--accent);
-      animation: spin 1.2s linear infinite;
-      margin-bottom: 4px;
+    .device-controls { display:flex; flex-direction:column; gap:10px; flex:1; }
+    .device-btn {
+      display:flex; align-items:center; gap:10px;
+      padding:10px 14px; background:var(--bg-secondary);
+      border:1px solid var(--border); border-radius:var(--radius);
+      cursor:pointer; transition:all var(--transition);
+      color:var(--text-primary); font-size:.88rem; font-weight:500;
+      width:100%; text-align:left;
     }
-    .status-ring.admitted { border-color: var(--success); animation: none; }
-    .status-ring.declined { border-color: var(--danger); animation: none; }
-    .status-ring.waiting-host { border-top-color: var(--warning); }
+    .device-btn:hover { background:rgba(255,255,255,.07); border-color:var(--accent); }
+    .device-btn.off   { background:rgba(239,68,68,.15); border-color:var(--danger); color:var(--danger); }
+    .device-btn svg   { flex-shrink:0; }
+    .device-btn-label { flex:1; }
 
-    @keyframes spin { to { transform: rotate(360deg); } }
+    /* Mic level bar */
+    .mic-level-wrap { display:flex; align-items:center; gap:8px; height:4px; }
+    .mic-level-bar  {
+      flex:1; height:4px; background:var(--bg-secondary); border-radius:2px; overflow:hidden;
+    }
+    .mic-level-fill {
+      height:100%; width:0%; background:var(--success); border-radius:2px;
+      transition:width .08s ease;
+    }
+
+    /* Status / waiting area */
+    .lobby-status { display:flex; flex-direction:column; align-items:center; gap:14px; text-align:center; }
+    .ring-wrap    { position:relative; width:64px; height:64px; margin:0 auto 4px; }
+    .status-ring  {
+      width:64px; height:64px; border-radius:50%;
+      border:3px solid var(--border); border-top-color:var(--accent);
+      animation:spin 1.2s linear infinite;
+    }
+    .status-ring.waiting-host { border-top-color:var(--warning); }
+    .status-ring.admitted     { border-color:var(--success); animation:none; }
+    .status-ring.declined     { border-color:var(--danger);  animation:none; }
+    @keyframes spin { to { transform:rotate(360deg); } }
 
     .status-icon-center {
-      position: absolute;
-      inset: 0; display: flex; align-items: center; justify-content: center;
-      font-size: 1.8rem;
+      position:absolute; inset:0;
+      display:flex; align-items:center; justify-content:center; font-size:1.6rem;
     }
-    .ring-wrap { position: relative; width: 72px; height: 72px; margin: 0 auto 8px; }
-
-    .lobby-heading { font-size: 1.3rem; font-weight: 700; margin-bottom: 6px; }
-    .lobby-sub { font-size: 0.88rem; color: var(--text-secondary); margin: 0; }
-
+    .lobby-heading { font-size:1.1rem; font-weight:700; margin-bottom:4px; }
+    .lobby-sub     { font-size:.85rem; color:var(--text-secondary); margin:0; line-height:1.5; }
     .meeting-name-chip {
-      background: var(--accent-dim);
-      border: 1px solid var(--border-accent);
-      color: var(--accent);
-      border-radius: 999px;
-      padding: 4px 14px;
-      font-size: 0.8rem;
-      font-weight: 600;
+      background:var(--accent-dim); border:1px solid var(--border-accent);
+      color:var(--accent); border-radius:999px; padding:4px 14px;
+      font-size:.8rem; font-weight:600;
     }
-
-    .dot-pulse {
-      display: flex; gap: 5px; margin-top: 8px; justify-content: center;
-    }
+    .dot-pulse { display:flex; gap:5px; margin-top:6px; justify-content:center; }
     .dot-pulse span {
-      width: 7px; height: 7px; border-radius: 50%;
-      background: var(--accent); opacity: 0.3;
-      animation: dotpulse 1.4s infinite ease-in-out;
+      width:6px; height:6px; border-radius:50%;
+      background:var(--accent); opacity:.3;
+      animation:dotpulse 1.4s infinite ease-in-out;
     }
-    .dot-pulse span:nth-child(2) { animation-delay: 0.2s; }
-    .dot-pulse span:nth-child(3) { animation-delay: 0.4s; }
-    @keyframes dotpulse { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1)} }
+    .dot-pulse span:nth-child(2) { animation-delay:.2s; }
+    .dot-pulse span:nth-child(3) { animation-delay:.4s; }
+    @keyframes dotpulse { 0%,100%{opacity:.2;transform:scale(.8);} 50%{opacity:1;transform:scale(1);} }
 
-    .admitted-icon { font-size: 2.5rem; animation: popIn .4s cubic-bezier(.34,1.56,.64,1); }
-    @keyframes popIn { from{transform:scale(0);opacity:0} to{transform:scale(1);opacity:1} }
-
-    #leaveBtn { margin-top: 16px; }
+    #leaveBtn { margin-top:12px; }
   </style>
 </head>
 <body>
@@ -126,19 +114,53 @@
 <div class="lobby-wrap">
   <div class="lobby-logo">Meet<span>AI</span></div>
 
-  <div class="lobby-card">
-    <div class="preview-wrap">
-      <video id="previewVideo" autoplay playsinline muted></video>
-      <div class="avatar-preview" id="previewAvatar" style="display:none;"></div>
-    </div>
-    <div class="preview-controls">
-      <button class="preview-btn" id="micToggle" onclick="toggleMic()" title="Toggle mic">🎤</button>
-      <button class="preview-btn" id="camToggle" onclick="toggleCam()" title="Toggle camera">📷</button>
+  <div class="lobby-card" id="lobbyCard">
+    <!-- Step 1: Name input (shown if guest) -->
+    <div class="name-step" id="nameStep" style="display:none;">
+      <h2>What's your name?</h2>
+      <p>This is how other participants will see you in the meeting.</p>
+      <div class="name-input-wrap">
+        <input class="input" id="displayNameInput" placeholder="Your full name" maxlength="60"
+          onkeydown="if(event.key==='Enter') confirmName()">
+        <button class="btn btn-primary" onclick="confirmName()">Continue</button>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="window.location.href='dashboard.html'" style="margin-top:16px;">← Back</button>
     </div>
 
-    <div class="lobby-status" id="lobbyStatus"></div>
+    <!-- Step 2: Device test + waiting room -->
+    <div class="device-step" id="deviceStep" style="display:none;">
+      <div class="preview-section">
+        <div class="preview-wrap">
+          <video id="previewVideo" autoplay playsinline muted></video>
+          <div class="preview-avatar" id="previewAvatar" style="display:none;"></div>
+        </div>
+        <div class="device-controls">
+          <button class="device-btn" id="micBtn" onclick="toggleMic()">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+            <span class="device-btn-label" id="micBtnLabel">Microphone on</span>
+          </button>
+          <div class="mic-level-wrap" id="micLevelWrap">
+            <span style="font-size:.7rem;color:var(--text-muted);">Level</span>
+            <div class="mic-level-bar"><div class="mic-level-fill" id="micLevelFill"></div></div>
+          </div>
+          <button class="device-btn" id="camBtn" onclick="toggleCam()">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <polygon points="23 7 16 12 23 17 23 7"/>
+              <rect x="1" y="5" width="15" height="14" rx="2"/>
+            </svg>
+            <span class="device-btn-label" id="camBtnLabel">Camera on</span>
+          </button>
+        </div>
+      </div>
 
-    <button class="btn btn-ghost btn-sm" id="leaveBtn" onclick="window.location.href='dashboard.html'" style="margin-top:20px;">← Leave</button>
+      <div class="lobby-status" id="lobbyStatus"></div>
+
+      <button class="btn btn-ghost btn-sm" id="leaveBtn" onclick="window.location.href='dashboard.html'">← Leave</button>
+    </div>
   </div>
 </div>
 
@@ -151,13 +173,24 @@
 <script src="js/config.js"></script>
 <script src="js/auth.js"></script>
 <script>
-let meetingId    = null;
-let currentUser  = null;
-let localStream  = null;
-let micOn        = true;
-let camOn        = true;
-let requestRef   = null;
+let meetingId   = null;
+let currentUser = null;
+let localStream = null;
+let micOn       = true;
+let camOn       = true;
+let requestRef  = null;
+let _micAnalyser = null;
+let _micAnimId   = null;
 
+function getInitials(name) {
+  if (!name) return "?";
+  return name.trim().split(/\s+/).map(w => w[0]).join("").toUpperCase().slice(0, 2);
+}
+function escapeHtml(s) {
+  return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+// ── Entry point ───────────────────────────────────────────
 onAuthReady(async user => {
   hideAuthSpinner();
   if (!user) {
@@ -170,67 +203,164 @@ onAuthReady(async user => {
   meetingId = params.get("id");
   if (!meetingId) { window.location.href = "dashboard.html"; return; }
 
-  // Check meeting exists in Realtime Database
-  const snap = await db.ref("meetings/" + meetingId).once("value");
-  if (!snap.exists()) {
-    setStatus("error", "Meeting not found", "The meeting ID is invalid or it has been deleted.");
-    return;
+  // Check meeting exists
+  let meetingData;
+  try {
+    const snap = await db.ref("meetings/" + meetingId).once("value");
+    if (!snap.exists()) {
+      showStep2();
+      setStatus("error", "Meeting not found", "The meeting ID is invalid or has been deleted.");
+      return;
+    }
+    meetingData = snap.val();
+  } catch (err) {
+    // RTDB read failed — still let them in (rules may not be published)
+    meetingData = { hostId: null, name: "Meeting", status: "active" };
   }
 
-  const data = snap.val();
-
-  // Host goes straight in
-  if (data.hostId === user.uid) {
+  // Host goes straight in, no lobby needed
+  if (meetingData.hostId === user.uid) {
     window.location.href = "meeting.html?id=" + meetingId;
     return;
   }
 
-  if (data.status === "ended") {
-    setStatus("declined", "Meeting ended", "This meeting has already ended.");
+  if (meetingData.status === "ended") {
+    showStep2();
+    setStatus("error", "Meeting ended", "This meeting has already ended.");
     return;
   }
 
-  await startPreview();
-  await placeJoinRequest(data.name || "Meeting", user);
+  // Decide whether to show name step
+  const hasName = user.displayName && user.displayName.trim().length > 2 && user.displayName !== "Anonymous";
+  if (hasName) {
+    showStep2();
+    await startPreview();
+    await placeJoinRequest(meetingData.name || "Meeting", user);
+  } else {
+    // Show name input
+    const input = document.getElementById("displayNameInput");
+    if (input && user.displayName) input.value = user.displayName;
+    document.getElementById("nameStep").style.display = "block";
+  }
 });
 
+// ── Step 1: Confirm name ──────────────────────────────────
+async function confirmName() {
+  const input = document.getElementById("displayNameInput");
+  const name  = (input?.value || "").trim();
+  if (!name) { input?.focus(); return; }
+
+  // Save name to Firebase Auth profile
+  try {
+    await auth.currentUser.updateProfile({ displayName: name });
+    currentUser = auth.currentUser;
+  } catch (_) {
+    // If update fails, use the name locally
+    currentUser = { ...currentUser, displayName: name };
+  }
+
+  document.getElementById("nameStep").style.display = "none";
+  showStep2();
+
+  try {
+    const snap = await db.ref("meetings/" + meetingId).once("value");
+    const data = snap.val() || {};
+    await startPreview();
+    await placeJoinRequest(data.name || "Meeting", currentUser);
+  } catch (err) {
+    await startPreview();
+    await placeJoinRequest("Meeting", currentUser);
+  }
+}
+
+function showStep2() {
+  document.getElementById("nameStep").style.display = "none";
+  document.getElementById("deviceStep").style.display = "flex";
+}
+
+// ── Camera/mic preview ────────────────────────────────────
 async function startPreview() {
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    document.getElementById("previewVideo").srcObject = localStream;
+    localStream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+    const vid = document.getElementById("previewVideo");
+    if (vid) vid.srcObject = localStream;
+    startMicLevel();
   } catch (_) {
-    camOn = false;
-    document.getElementById("previewVideo").style.display = "none";
-    document.getElementById("previewAvatar").style.display = "flex";
-    document.getElementById("previewAvatar").textContent = getInitials(currentUser.displayName);
-    document.getElementById("camToggle").classList.add("off");
+    camOn = false; micOn = false;
+    showAvatarPreview();
+    document.getElementById("camBtn").classList.add("off");
+    document.getElementById("camBtnLabel").textContent = "Camera unavailable";
+    document.getElementById("micBtn").classList.add("off");
+    document.getElementById("micBtnLabel").textContent = "Mic unavailable";
+    document.getElementById("micLevelWrap").style.display = "none";
   }
+}
+
+function showAvatarPreview() {
+  const av = document.getElementById("previewAvatar");
+  const vid = document.getElementById("previewVideo");
+  if (av) { av.style.display = "flex"; av.textContent = getInitials(currentUser?.displayName || "?"); }
+  if (vid) vid.style.display = "none";
+}
+
+function startMicLevel() {
+  if (!localStream) return;
+  try {
+    const ctx      = new AudioContext();
+    const src      = ctx.createMediaStreamSource(localStream);
+    _micAnalyser   = ctx.createAnalyser();
+    _micAnalyser.fftSize = 256;
+    src.connect(_micAnalyser);
+    const buf = new Uint8Array(_micAnalyser.frequencyBinCount);
+    const fill = document.getElementById("micLevelFill");
+    const tick = () => {
+      _micAnalyser.getByteFrequencyData(buf);
+      const avg = buf.reduce((a,b)=>a+b,0) / buf.length;
+      if (fill) fill.style.width = Math.min(100, avg * 2) + "%";
+      _micAnimId = requestAnimationFrame(tick);
+    };
+    tick();
+  } catch (_) {}
 }
 
 function toggleMic() {
   micOn = !micOn;
   if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = micOn);
-  const btn = document.getElementById("micToggle");
-  btn.textContent = micOn ? "🎤" : "🔇";
-  btn.classList.toggle("off", !micOn);
+  const btn = document.getElementById("micBtn");
+  const lbl = document.getElementById("micBtnLabel");
+  if (btn) btn.classList.toggle("off", !micOn);
+  if (lbl) lbl.textContent = micOn ? "Microphone on" : "Microphone off";
+  if (!micOn && _micAnimId) {
+    cancelAnimationFrame(_micAnimId);
+    const fill = document.getElementById("micLevelFill");
+    if (fill) fill.style.width = "0%";
+  } else if (micOn) { startMicLevel(); }
 }
 
 function toggleCam() {
   camOn = !camOn;
   if (localStream) localStream.getVideoTracks().forEach(t => t.enabled = camOn);
-  const vidEl  = document.getElementById("previewVideo");
-  const avatar = document.getElementById("previewAvatar");
-  vidEl.style.display    = camOn ? "block" : "none";
-  avatar.style.display   = camOn ? "none"  : "flex";
-  avatar.textContent     = getInitials(currentUser.displayName);
-  const btn = document.getElementById("camToggle");
-  btn.textContent = camOn ? "📷" : "📷🚫";
-  btn.classList.toggle("off", !camOn);
+  const vid = document.getElementById("previewVideo");
+  const av  = document.getElementById("previewAvatar");
+  const btn = document.getElementById("camBtn");
+  const lbl = document.getElementById("camBtnLabel");
+  if (camOn) {
+    if (vid) vid.style.display = "block";
+    if (av)  av.style.display  = "none";
+  } else {
+    if (vid) vid.style.display = "none";
+    if (av)  { av.style.display = "flex"; av.textContent = getInitials(currentUser?.displayName || "?"); }
+  }
+  if (btn) btn.classList.toggle("off", !camOn);
+  if (lbl) lbl.textContent = camOn ? "Camera on" : "Camera off";
 }
 
+// ── Join request (waiting room) ───────────────────────────
 async function placeJoinRequest(meetingName, user) {
   requestRef = db.ref("joinRequests/" + meetingId + "/" + user.uid);
-
   await requestRef.set({
     uid:         user.uid,
     displayName: user.displayName || "Guest",
@@ -238,7 +368,6 @@ async function placeJoinRequest(meetingName, user) {
     requestedAt: firebase.database.ServerValue.TIMESTAMP,
     status:      "pending"
   });
-
   requestRef.onDisconnect().remove();
   showWaitingStatus(meetingName);
 
@@ -247,83 +376,82 @@ async function placeJoinRequest(meetingName, user) {
     if (!data) return;
     if (data.status === "admitted") {
       showAdmittedStatus();
-      if (localStream) localStream.getTracks().forEach(t => t.stop());
-      setTimeout(() => { window.location.href = "meeting.html?id=" + meetingId; }, 1800);
+      stopPreview();
+      setTimeout(() => { window.location.href = "meeting.html?id=" + meetingId; }, 1500);
     } else if (data.status === "declined") {
       showDeclinedStatus();
       requestRef.remove();
     }
   });
 
-  const hostPresenceRef = db.ref("presence/" + meetingId);
-  hostPresenceRef.once("value", snap => {
+  // Check if host is present
+  const hostPresRef = db.ref("presence/" + meetingId);
+  hostPresRef.once("value", snap => {
     if (!snap.exists() || !snap.val()) showWaitingForHostStatus(meetingName);
   });
-  hostPresenceRef.on("child_added", () => {
+  hostPresRef.on("child_added", () => {
     requestRef.once("value", snap => {
       if (snap.val()?.status === "pending") showWaitingStatus(meetingName);
     });
   });
 }
 
+function stopPreview() {
+  if (_micAnimId) cancelAnimationFrame(_micAnimId);
+  if (localStream) localStream.getTracks().forEach(t => t.stop());
+}
+
+// ── Status screens ────────────────────────────────────────
 function showWaitingStatus(meetingName) {
   document.getElementById("lobbyStatus").innerHTML = `
-    <span class="meeting-name-chip">📅 ${escapeHtml(meetingName)}</span>
+    <span class="meeting-name-chip">${escapeHtml(meetingName)}</span>
     <div class="ring-wrap"><div class="status-ring"></div></div>
     <div>
       <div class="lobby-heading">Waiting to be admitted</div>
       <p class="lobby-sub">The host has been notified you're here.</p>
       <div class="dot-pulse"><span></span><span></span><span></span></div>
-    </div>
-  `;
+    </div>`;
 }
 
 function showWaitingForHostStatus(meetingName) {
   document.getElementById("lobbyStatus").innerHTML = `
-    <span class="meeting-name-chip">📅 ${escapeHtml(meetingName)}</span>
+    <span class="meeting-name-chip">${escapeHtml(meetingName)}</span>
     <div class="ring-wrap"><div class="status-ring waiting-host"></div></div>
     <div>
       <div class="lobby-heading">Waiting for the host</div>
-      <p class="lobby-sub">The host hasn't started the meeting yet.<br>You'll be let in automatically.</p>
+      <p class="lobby-sub">The host hasn't started yet.<br>You'll be admitted automatically.</p>
       <div class="dot-pulse"><span></span><span></span><span></span></div>
-    </div>
-  `;
+    </div>`;
 }
 
 function showAdmittedStatus() {
   document.getElementById("lobbyStatus").innerHTML = `
-    <div class="admitted-icon">✅</div>
+    <div style="font-size:2.5rem;">✅</div>
     <div>
       <div class="lobby-heading" style="color:var(--success)">You've been admitted!</div>
-      <p class="lobby-sub">Joining the meeting now…</p>
-    </div>
-  `;
+      <p class="lobby-sub">Joining now…</p>
+    </div>`;
 }
 
 function showDeclinedStatus() {
   document.getElementById("lobbyStatus").innerHTML = `
-    <div class="admitted-icon">❌</div>
+    <div style="font-size:2.5rem;">❌</div>
     <div>
       <div class="lobby-heading" style="color:var(--danger)">Request declined</div>
       <p class="lobby-sub">The host didn't let you in this time.</p>
-    </div>
-  `;
-  document.getElementById("leaveBtn").textContent = "← Back to Dashboard";
+    </div>`;
+  const lb = document.getElementById("leaveBtn");
+  if (lb) lb.textContent = "← Back to Dashboard";
 }
 
 function setStatus(type, heading, sub) {
-  const icons = { error: "⚠️", declined: "❌", admitted: "✅" };
+  const icons = { error:"⚠️", declined:"❌", admitted:"✅" };
   document.getElementById("lobbyStatus").innerHTML = `
-    <div class="admitted-icon">${icons[type] || "ℹ️"}</div>
+    <div style="font-size:2.5rem;">${icons[type]||"ℹ️"}</div>
     <div>
       <div class="lobby-heading">${escapeHtml(heading)}</div>
       <p class="lobby-sub">${escapeHtml(sub)}</p>
-    </div>
-  `;
-}
-
-function escapeHtml(s) {
-  return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    </div>`;
 }
 </script>
 </body>
