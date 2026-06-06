@@ -591,12 +591,26 @@ async function handleScreenShare() {
         const wrap = document.getElementById("screenPreviewWrap");
         if (wrap) wrap.style.display = "none";
         _restoreCameraAfterScreenShare();
+        // Remove screen share badge from local tile
+        if (typeof currentUser !== "undefined" && currentUser) {
+          document.getElementById("tile-" + currentUser.uid)?.querySelector(".screen-share-badge")?.remove();
+        }
       });
       _screenSharing = true;
       _updateScreenBtn(true);
       const preview = document.getElementById("screenPreview");
       const wrap    = document.getElementById("screenPreviewWrap");
       if (preview && stream) { preview.srcObject = stream; if (wrap) wrap.style.display = "block"; }
+      // Add screen share badge to local tile immediately (others see it via Firebase presence)
+      if (typeof currentUser !== "undefined" && currentUser) {
+        const localTile = document.getElementById("tile-" + currentUser.uid);
+        if (localTile && !localTile.querySelector(".screen-share-badge")) {
+          const sb = document.createElement("div");
+          sb.className = "screen-share-badge";
+          sb.textContent = "🖥 Sharing";
+          localTile.appendChild(sb);
+        }
+      }
     } catch (e) {
       if (e.name !== "NotAllowedError") showToast("Screen share failed: " + e.message);
     }
@@ -607,6 +621,10 @@ async function handleScreenShare() {
     const wrap = document.getElementById("screenPreviewWrap");
     if (wrap) wrap.style.display = "none";
     _restoreCameraAfterScreenShare();
+    // Remove screen share badge from local tile
+    if (typeof currentUser !== "undefined" && currentUser) {
+      document.getElementById("tile-" + currentUser.uid)?.querySelector(".screen-share-badge")?.remove();
+    }
   }
 }
 
