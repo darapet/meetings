@@ -91,7 +91,14 @@ class PetAI {
     if (this.active) return;
     this.active = true;
     try { this._wakeRecog?.abort(); } catch (_) {}
-
+    // Broadcast to all participants that Pet AI is active
+    try {
+      db.ref("petAIBroadcast/" + this.meetingId).set({
+        active: true,
+        uid: (typeof getCurrentUser === "function" ? getCurrentUser()?.uid : null) || "",
+        ts: firebase.database.ServerValue.TIMESTAMP
+      });
+    } catch (_) {}
     this._clearChat();
     this._showOrb();
     this._greet();
@@ -282,6 +289,13 @@ class PetAI {
     window.speechSynthesis?.cancel();
     this._speaking = true;
     this._setOrbState("speaking");
+    // Broadcast spoken text so all participants can hear Pet AI
+    try {
+      db.ref("petAIBroadcast/" + this.meetingId + "/speech").set({
+        text: text.replace(/[✦📖📝]/g, "").trim(),
+        ts: Date.now()
+      });
+    } catch (_) {}
 
     const utter = new SpeechSynthesisUtterance(text.replace(/[✦📖📝]/g, ""));
     utter.rate   = 1.05;
@@ -315,6 +329,8 @@ class PetAI {
     this._hideOrb();
     this._setStatus("Pet AI");
     this._setOrbState("idle");
+    // Clear broadcast so all participants restore their mics
+    try { db.ref("petAIBroadcast/" + this.meetingId).set({ active: false }); } catch (_) {}
     setTimeout(() => this.startWakeWordDetection(), 800);
   }
 
