@@ -16,48 +16,58 @@ class WebRTCManager {
     this._activeVideoTrack    = null;
     this.audioProcessor       = null;
     this.presenceRef          = db.ref(`presence/${meetingId}/${userId}`);
-    this._listeners           = [];
   }
 
-  // ── Get local media + apply audio processing chain ────────
+  // ── Get local media + audio processing chain ──────────────
   async getLocalStream(videoEnabled = true, audioEnabled = true) {
-    // Aggressive browser-level constraints first
+    // Force echo cancellation (exact = required, not a preference)
+    // This is critical for two devices in the same room
     const audioConstraints = audioEnabled ? {
-      echoCancellation:         { ideal: true },
-      noiseSuppression:         { ideal: true },
-      autoGainControl:          { ideal: true },
-      channelCount:             1,      // mono voice — tighter directional pickup
+      echoCancellation:         { exact: true },
+      noiseSuppression:         { exact: true },
+      autoGainControl:          { exact: true },
+      channelCount:             1,
       sampleRate:               48000,
       sampleSize:               16,
       latency:                  0,
-      // Chrome / Edge advanced constraints (silently ignored elsewhere)
+      // Chrome/Edge advanced — suppresses room echo aggressively
       googEchoCancellation:     true,
       googEchoCancellation2:    true,
       googNoiseSuppression:     true,
       googNoiseSuppression2:    true,
       googAutoGainControl:      true,
       googAutoGainControl2:     true,
-      googHighpassFilter:       true,   // built-in 100 Hz high-pass
+      googHighpassFilter:       true,
       googTypingNoiseDetection: true,
       googNoiseReduction:       true,
+      googBeamforming:          true,  // focus on sound directly in front of mic
     } : false;
-
-    const videoConstraints = videoEnabled
-      ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }
-      : false;
 
     let raw;
     try {
       raw = await navigator.mediaDevices.getUserMedia({
-        video: videoConstraints,
+        video: videoEnabled
+          ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }
+          : false,
         audio: audioConstraints
       });
     } catch (err) {
-      console.error("getUserMedia error:", err);
-      throw err;
+      // If exact constraints fail, fall back to ideal
+      try {
+        raw = await navigator.mediaDevices.getUserMedia({
+          video: videoEnabled
+            ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }
+            : false,
+          audio: audioEnabled ? {
+            echoCancellation: true, noiseSuppression: true, autoGainControl: true,
+            channelCount: 1, sampleRate: 48000
+          } : false
+        });
+      } catch (e2) {
+        throw e2;
+      }
     }
 
-    // Apply Web Audio processing chain (high-pass + low-pass + compressor + noise gate)
     if (audioEnabled) {
       try {
         this.audioProcessor = new AudioProcessor();
@@ -73,7 +83,7 @@ class WebRTCManager {
     return this.localStream;
   }
 
-  // ── Join room & start signaling ───────────────────────────
+  // ── Join room ─────────────────────────────────────────────
   async joinRoom() {
     this.presenceRef.set({
       userId:      this.userId,
@@ -89,12 +99,9 @@ class WebRTCManager {
     presRef.on("child_added", snap => {
       const peerId = snap.key;
       if (peerId === this.userId) return;
-      const isCaller = this.userId > peerId;
-      this._createPeerConnection(peerId, isCaller);
+      this._createPeerConnection(peerId, this.userId > peerId);
     });
-    presRef.on("child_removed", snap => {
-      this._handlePeerLeft(snap.key);
-    });
+    presRef.on("child_removed", snap => this._handlePeerLeft(snap.key));
 
     const sigRef = db.ref(`signals/${this.meetingId}/${this.userId}`);
     sigRef.on("child_added", async snap => {
@@ -104,19 +111,15 @@ class WebRTCManager {
     });
   }
 
-  // ── Create peer connection ────────────────────────────────
   async _createPeerConnection(peerId, isCaller) {
     if (this.peers[peerId]) return this.peers[peerId];
-
     const pc = new RTCPeerConnection(ICE_SERVERS);
     this.peers[peerId] = pc;
     this._iceCandidateQueues[peerId] = [];
 
-    // Add local tracks — use active video (screen share or camera)
     if (this.localStream) {
       this.localStream.getAudioTracks().forEach(t => pc.addTrack(t, this.localStream));
-      const videoTrack = this._activeVideoTrack
-        || (this.localStream.getVideoTracks()[0] || null);
+      const videoTrack = this._activeVideoTrack || (this.localStream.getVideoTracks()[0] || null);
       if (videoTrack) pc.addTrack(videoTrack, this.localStream);
     }
 
@@ -125,9 +128,7 @@ class WebRTCManager {
 
     pc.ontrack = evt => {
       const track = evt.track;
-      if (!remoteStream.getTracks().find(t => t.id === track.id)) {
-        remoteStream.addTrack(track);
-      }
+      if (!remoteStream.getTracks().find(t => t.id === track.id)) remoteStream.addTrack(track);
       this.onRemoteStream(peerId, remoteStream);
       track.onunmute = () => this.onRemoteStream(peerId, remoteStream);
     };
@@ -137,15 +138,11 @@ class WebRTCManager {
     };
 
     pc.oniceconnectionstatechange = () => {
-      if (["disconnected", "failed", "closed"].includes(pc.iceConnectionState)) {
-        this._handlePeerLeft(peerId);
-      }
+      if (["disconnected","failed","closed"].includes(pc.iceConnectionState)) this._handlePeerLeft(peerId);
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "failed") {
-        try { pc.restartIce(); } catch(_) {}
-      }
+      if (pc.connectionState === "failed") { try { pc.restartIce(); } catch(_) {} }
     };
 
     if (isCaller) {
@@ -153,11 +150,9 @@ class WebRTCManager {
       await pc.setLocalDescription(offer);
       this._sendSignal(peerId, "offer", { sdp: offer.sdp, type: offer.type });
     }
-
     return pc;
   }
 
-  // ── Handle incoming signal ────────────────────────────────
   async _handleSignal(peerId, type, payload) {
     if (type === "offer") {
       let pc = this.peers[peerId];
@@ -165,30 +160,29 @@ class WebRTCManager {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(payload));
           await this._drainIceCandidateQueue(peerId);
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          this._sendSignal(peerId, "answer", { sdp: answer.sdp, type: answer.type });
-        } catch(e) { console.error("Re-offer handling error:", e); }
+          const ans = await pc.createAnswer();
+          await pc.setLocalDescription(ans);
+          this._sendSignal(peerId, "answer", { sdp: ans.sdp, type: ans.type });
+        } catch(e) { console.error("Re-offer:", e); }
         return;
       }
       pc = await this._createPeerConnection(peerId, false);
       await pc.setRemoteDescription(new RTCSessionDescription(payload));
       await this._drainIceCandidateQueue(peerId);
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      this._sendSignal(peerId, "answer", { sdp: answer.sdp, type: answer.type });
-
+      const ans = await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      this._sendSignal(peerId, "answer", { sdp: ans.sdp, type: ans.type });
     } else if (type === "answer") {
       const pc = this.peers[peerId];
       if (pc && pc.signalingState !== "stable") {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(payload));
           await this._drainIceCandidateQueue(peerId);
-        } catch(e) { console.error("Answer handling error:", e); }
+        } catch(e) { console.error("Answer:", e); }
       }
     } else if (type === "ice") {
       const pc = this.peers[peerId];
-      if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+      if (pc && pc.remoteDescription?.type) {
         try { await pc.addIceCandidate(new RTCIceCandidate(payload)); } catch(_) {}
       } else {
         if (!this._iceCandidateQueues[peerId]) this._iceCandidateQueues[peerId] = [];
@@ -198,33 +192,32 @@ class WebRTCManager {
   }
 
   async _drainIceCandidateQueue(peerId) {
-    const queue = this._iceCandidateQueues[peerId] || [];
-    const pc    = this.peers[peerId];
-    if (!pc || !queue.length) return;
-    for (const c of queue) {
-      try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch(_) {}
-    }
+    const q = this._iceCandidateQueues[peerId] || [];
+    const pc = this.peers[peerId];
+    if (!pc || !q.length) return;
+    for (const c of q) { try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch(_) {} }
     this._iceCandidateQueues[peerId] = [];
   }
 
-  _sendSignal(targetId, type, payload) {
-    db.ref(`signals/${this.meetingId}/${targetId}`).push({ from: this.userId, type, payload });
+  _sendSignal(t, type, payload) {
+    db.ref(`signals/${this.meetingId}/${t}`).push({ from: this.userId, type, payload });
   }
 
   _handlePeerLeft(peerId) {
     if (this.peers[peerId]) {
       this.peers[peerId].close();
-      delete this.peers[peerId];
-      delete this.remoteStreams[peerId];
-      delete this._iceCandidateQueues[peerId];
+      delete this.peers[peerId]; delete this.remoteStreams[peerId]; delete this._iceCandidateQueues[peerId];
       this.onPeerLeft(peerId);
     }
   }
 
-  // ── Toggle audio / video ──────────────────────────────────
+  // ── Mic toggle — also silences the audio processing chain ──
   setAudioEnabled(enabled) {
     if (!this.localStream) return;
     this.localStream.getAudioTracks().forEach(t => t.enabled = enabled);
+    // KEY FIX: bypass the audio processor chain when muted
+    // Without this, ScriptProcessor continues running and gate shows activity
+    if (this.audioProcessor) this.audioProcessor.setInputEnabled(enabled);
     this.presenceRef.update({ audio: enabled }).catch(() => {});
   }
 
@@ -237,51 +230,32 @@ class WebRTCManager {
   // ── Screen share ──────────────────────────────────────────
   async startScreenShare(onEnd) {
     try {
-      this.screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { cursor: "always" },
-        audio: true
-      });
+      this.screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: "always" }, audio: true });
       const screenTrack = this.screenStream.getVideoTracks()[0];
       this._activeVideoTrack = screenTrack;
-
       for (const [peerId, pc] of Object.entries(this.peers)) {
-        const sender = pc.getSenders().find(s => s.track && s.track.kind === "video");
+        const sender = pc.getSenders().find(s => s.track?.kind === "video");
         if (sender) {
           await sender.replaceTrack(screenTrack);
-          try {
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            this._sendSignal(peerId, "offer", { sdp: offer.sdp, type: offer.type });
-          } catch(e) { console.error("Screen share renegotiation error:", e); }
+          try { const o = await pc.createOffer(); await pc.setLocalDescription(o); this._sendSignal(peerId, "offer", { sdp: o.sdp, type: o.type }); } catch(_) {}
         }
       }
-
       screenTrack.onended = () => this.stopScreenShare(onEnd);
       this.presenceRef.update({ screenSharing: true }).catch(() => {});
       return this.screenStream;
-    } catch (err) {
-      console.error("Screen share error:", err);
-      throw err;
-    }
+    } catch (err) { throw err; }
   }
 
   async stopScreenShare(callback) {
     this._activeVideoTrack = null;
-    if (this.screenStream) {
-      this.screenStream.getTracks().forEach(t => t.stop());
-      this.screenStream = null;
-    }
-    const camTrack = this.localStream ? this.localStream.getVideoTracks()[0] : null;
+    if (this.screenStream) { this.screenStream.getTracks().forEach(t => t.stop()); this.screenStream = null; }
+    const camTrack = this.localStream?.getVideoTracks()[0];
     if (camTrack) {
       for (const [peerId, pc] of Object.entries(this.peers)) {
-        const sender = pc.getSenders().find(s => s.track && s.track.kind === "video");
+        const sender = pc.getSenders().find(s => s.track?.kind === "video");
         if (sender) {
           await sender.replaceTrack(camTrack);
-          try {
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            this._sendSignal(peerId, "offer", { sdp: offer.sdp, type: offer.type });
-          } catch(e) { console.error("Stop screen share renegotiation error:", e); }
+          try { const o = await pc.createOffer(); await pc.setLocalDescription(o); this._sendSignal(peerId, "offer", { sdp: o.sdp, type: o.type }); } catch(_) {}
         }
       }
     }
@@ -289,31 +263,13 @@ class WebRTCManager {
     if (callback) callback();
   }
 
-  async switchCamera(deviceId) {
-    const newStream = await navigator.mediaDevices.getUserMedia({
-      video: { deviceId: { exact: deviceId } }, audio: false
-    });
-    const newTrack = newStream.getVideoTracks()[0];
-    for (const pc of Object.values(this.peers)) {
-      const sender = pc.getSenders().find(s => s.track && s.track.kind === "video");
-      if (sender) sender.replaceTrack(newTrack);
-    }
-    if (this.localStream) {
-      const old = this.localStream.getVideoTracks()[0];
-      if (old) { old.stop(); this.localStream.removeTrack(old); }
-      this.localStream.addTrack(newTrack);
-    }
-  }
-
   async leave() {
     this.presenceRef.remove();
     Object.values(this.peers).forEach(pc => pc.close());
-    this.peers = {};
-    this.remoteStreams = {};
-    this._iceCandidateQueues = {};
-    if (this.localStream)     this.localStream.getTracks().forEach(t => t.stop());
-    if (this.screenStream)    this.screenStream.getTracks().forEach(t => t.stop());
-    if (this.audioProcessor)  this.audioProcessor.destroy();
+    this.peers = {}; this.remoteStreams = {}; this._iceCandidateQueues = {};
+    if (this.localStream)    this.localStream.getTracks().forEach(t => t.stop());
+    if (this.screenStream)   this.screenStream.getTracks().forEach(t => t.stop());
+    if (this.audioProcessor) this.audioProcessor.destroy();
     db.ref(`signals/${this.meetingId}/${this.userId}`).remove();
   }
 }
