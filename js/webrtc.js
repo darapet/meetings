@@ -268,8 +268,25 @@ class WebRTCManager {
           const ans = await pc.createAnswer();
           await pc.setLocalDescription(ans);
           this._sendSignal(peerId, "answer", { sdp: ans.sdp, type: ans.type });
-          // Re-trigger so the video element immediately reflects the new/replaced track
-          if (this.remoteStreams[peerId]) this.onRemoteStream(peerId, this.remoteStreams[peerId]);
+          // After renegotiation (e.g. screen share start/stop via replaceTrack),
+          // ontrack does NOT fire again — so we must manually sync remoteStream
+          // with the current live receiver tracks, otherwise the video stays frozen.
+          const remoteStream = this.remoteStreams[peerId];
+          if (remoteStream) {
+            pc.getReceivers().forEach(receiver => {
+              const t = receiver.track;
+              if (!t) return;
+              // Drop any ended tracks of the same kind
+              remoteStream.getTracks()
+                .filter(existing => existing.kind === t.kind && existing.id !== t.id)
+                .forEach(stale => remoteStream.removeTrack(stale));
+              // Add the live receiver track if not already present
+              if (!remoteStream.getTracks().find(existing => existing.id === t.id)) {
+                remoteStream.addTrack(t);
+              }
+            });
+            this.onRemoteStream(peerId, remoteStream);
+          }
         } catch(e) { console.error("Re-offer:", e); }
         return;
       }
