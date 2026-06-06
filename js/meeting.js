@@ -734,6 +734,7 @@ function startRecording() {
 // Stop recording → immediately download the file (no dialog)
 async function stopRecordingAndSave() {
   if (!recorder) return null;
+  const durationMs = recorder.durationMs;
   const blob = await recorder.stop();
   recorder = null;
   if (typeof _syncRecordIcon === "function") _syncRecordIcon(false);
@@ -741,7 +742,7 @@ async function stopRecordingAndSave() {
   const pw = document.getElementById("pauseRecordWrap");
   if (pw) pw.style.display = "none";
   if (blob && blob.size > 0) {
-    _downloadRecording(blob);   // ← auto-download immediately, no dialog
+    _downloadRecording(blob, durationMs);
     showToast("Recording saved & downloading…");
     return blob;
   }
