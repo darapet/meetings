@@ -1,44 +1,76 @@
 // ============================================================
-//  WEBRTC.JS — Peer connections via Firebase RTDB signaling
+//  WEBRTC.JS — Peer connections + professional audio pipeline
 // ============================================================
 
 class WebRTCManager {
   constructor(meetingId, userId, onRemoteStream, onPeerLeft) {
-    this.meetingId          = meetingId;
-    this.userId             = userId;
-    this.onRemoteStream     = onRemoteStream;
-    this.onPeerLeft         = onPeerLeft;
-    this.peers              = {};
-    this.remoteStreams       = {};
-    this._iceCandidateQueues = {};
-    this.localStream        = null;
-    this.screenStream       = null;
-    this._activeVideoTrack  = null; // null = use localStream's camera track
-    this.roomRef            = db.ref(`rooms/${meetingId}`);
-    this.signalRef          = db.ref(`signals/${meetingId}`);
-    this.presenceRef        = db.ref(`presence/${meetingId}/${userId}`);
-    this._listeners         = [];
+    this.meetingId            = meetingId;
+    this.userId               = userId;
+    this.onRemoteStream       = onRemoteStream;
+    this.onPeerLeft           = onPeerLeft;
+    this.peers                = {};
+    this.remoteStreams         = {};
+    this._iceCandidateQueues  = {};
+    this.localStream          = null;
+    this.screenStream         = null;
+    this._activeVideoTrack    = null;
+    this.audioProcessor       = null;
+    this.presenceRef          = db.ref(`presence/${meetingId}/${userId}`);
+    this._listeners           = [];
   }
 
-  // ── Get local media ──────────────────────────────────────
+  // ── Get local media + apply audio processing chain ────────
   async getLocalStream(videoEnabled = true, audioEnabled = true) {
+    // Aggressive browser-level constraints first
+    const audioConstraints = audioEnabled ? {
+      echoCancellation:         { ideal: true },
+      noiseSuppression:         { ideal: true },
+      autoGainControl:          { ideal: true },
+      channelCount:             1,      // mono voice — tighter directional pickup
+      sampleRate:               48000,
+      sampleSize:               16,
+      latency:                  0,
+      // Chrome / Edge advanced constraints (silently ignored elsewhere)
+      googEchoCancellation:     true,
+      googEchoCancellation2:    true,
+      googNoiseSuppression:     true,
+      googNoiseSuppression2:    true,
+      googAutoGainControl:      true,
+      googAutoGainControl2:     true,
+      googHighpassFilter:       true,   // built-in 100 Hz high-pass
+      googTypingNoiseDetection: true,
+      googNoiseReduction:       true,
+    } : false;
+
+    const videoConstraints = videoEnabled
+      ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }
+      : false;
+
+    let raw;
     try {
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        video: videoEnabled
-          ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }
-          : false,
-        audio: audioEnabled ? {
-          echoCancellation:   true,
-          noiseSuppression:   true,
-          autoGainControl:    true,
-          sampleRate:         48000
-        } : false
+      raw = await navigator.mediaDevices.getUserMedia({
+        video: videoConstraints,
+        audio: audioConstraints
       });
-      return this.localStream;
     } catch (err) {
       console.error("getUserMedia error:", err);
       throw err;
     }
+
+    // Apply Web Audio processing chain (high-pass + low-pass + compressor + noise gate)
+    if (audioEnabled) {
+      try {
+        this.audioProcessor = new AudioProcessor();
+        this.localStream    = await this.audioProcessor.process(raw);
+      } catch (e) {
+        console.warn("AudioProcessor unavailable, using browser defaults:", e.message);
+        this.localStream = raw;
+      }
+    } else {
+      this.localStream = raw;
+    }
+
+    return this.localStream;
   }
 
   // ── Join room & start signaling ───────────────────────────
@@ -54,26 +86,22 @@ class WebRTCManager {
     this.presenceRef.onDisconnect().remove();
 
     const presRef = db.ref(`presence/${this.meetingId}`);
-    const onChild = presRef.on("child_added", snap => {
+    presRef.on("child_added", snap => {
       const peerId = snap.key;
       if (peerId === this.userId) return;
       const isCaller = this.userId > peerId;
       this._createPeerConnection(peerId, isCaller);
     });
-    this._listeners.push({ ref: presRef, event: "child_added", fn: onChild });
-
-    const onChildRemoved = presRef.on("child_removed", snap => {
+    presRef.on("child_removed", snap => {
       this._handlePeerLeft(snap.key);
     });
-    this._listeners.push({ ref: presRef, event: "child_removed", fn: onChildRemoved });
 
     const sigRef = db.ref(`signals/${this.meetingId}/${this.userId}`);
-    const onSignal = sigRef.on("child_added", async snap => {
+    sigRef.on("child_added", async snap => {
       const { from, type, payload } = snap.val();
       await this._handleSignal(from, type, payload);
       snap.ref.remove();
     });
-    this._listeners.push({ ref: sigRef, event: "child_added", fn: onSignal });
   }
 
   // ── Create peer connection ────────────────────────────────
@@ -84,7 +112,7 @@ class WebRTCManager {
     this.peers[peerId] = pc;
     this._iceCandidateQueues[peerId] = [];
 
-    // Add local tracks — use active video track (screen share or camera)
+    // Add local tracks — use active video (screen share or camera)
     if (this.localStream) {
       this.localStream.getAudioTracks().forEach(t => pc.addTrack(t, this.localStream));
       const videoTrack = this._activeVideoTrack
@@ -100,7 +128,6 @@ class WebRTCManager {
       if (!remoteStream.getTracks().find(t => t.id === track.id)) {
         remoteStream.addTrack(track);
       }
-      // Fire immediately and also on unmute (for autoplay policy)
       this.onRemoteStream(peerId, remoteStream);
       track.onunmute = () => this.onRemoteStream(peerId, remoteStream);
     };
@@ -170,7 +197,6 @@ class WebRTCManager {
     }
   }
 
-  // ── Drain queued ICE candidates ───────────────────────────
   async _drainIceCandidateQueue(peerId) {
     const queue = this._iceCandidateQueues[peerId] || [];
     const pc    = this.peers[peerId];
@@ -218,7 +244,6 @@ class WebRTCManager {
       const screenTrack = this.screenStream.getVideoTracks()[0];
       this._activeVideoTrack = screenTrack;
 
-      // Replace video track in all existing connections
       for (const [peerId, pc] of Object.entries(this.peers)) {
         const sender = pc.getSenders().find(s => s.track && s.track.kind === "video");
         if (sender) {
@@ -242,12 +267,10 @@ class WebRTCManager {
 
   async stopScreenShare(callback) {
     this._activeVideoTrack = null;
-
     if (this.screenStream) {
       this.screenStream.getTracks().forEach(t => t.stop());
       this.screenStream = null;
     }
-
     const camTrack = this.localStream ? this.localStream.getVideoTracks()[0] : null;
     if (camTrack) {
       for (const [peerId, pc] of Object.entries(this.peers)) {
@@ -288,8 +311,9 @@ class WebRTCManager {
     this.peers = {};
     this.remoteStreams = {};
     this._iceCandidateQueues = {};
-    if (this.localStream)  this.localStream.getTracks().forEach(t => t.stop());
-    if (this.screenStream) this.screenStream.getTracks().forEach(t => t.stop());
+    if (this.localStream)     this.localStream.getTracks().forEach(t => t.stop());
+    if (this.screenStream)    this.screenStream.getTracks().forEach(t => t.stop());
+    if (this.audioProcessor)  this.audioProcessor.destroy();
     db.ref(`signals/${this.meetingId}/${this.userId}`).remove();
   }
 }
