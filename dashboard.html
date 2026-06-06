@@ -212,6 +212,15 @@
           </div>
         </div>
       </div>
+
+      <!-- Recordings section — populated from localStorage -->
+      <div id="recordingsSection" style="display:none;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+          <h2 style="font-size:1.1rem;">🎙 My Recordings</h2>
+          <button class="btn btn-ghost btn-sm" onclick="clearAllRecordings()">Clear all</button>
+        </div>
+        <div class="meetings-grid" id="recordingsList"></div>
+      </div>
     </main>
   </div>
 </div>
@@ -263,6 +272,7 @@ onAuthReady(async user => {
   loadMeetings(user.uid);
   listenForActiveMeeting(user.uid);
   checkDevices();
+  loadRecordings();
 });
 
 // ── Live-listen for host's active meeting ──────────────────
@@ -460,6 +470,56 @@ function showToast(msg) {
 
 function escapeHtml(str) {
   return (str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+// ── Recordings (localStorage) ──────────────────────────────
+function loadRecordings() {
+  try {
+    const recs = JSON.parse(localStorage.getItem("meetai_recordings") || "[]");
+    const section = document.getElementById("recordingsSection");
+    const list    = document.getElementById("recordingsList");
+    if (!recs.length || !section || !list) return;
+    section.style.display = "block";
+    list.innerHTML = "";
+    recs.forEach((r, idx) => {
+      const card = document.createElement("div");
+      card.className = "meeting-card";
+      const date = r.date ? new Date(r.date).toLocaleString() : "—";
+      const dur  = r.durationSec
+        ? (r.durationSec >= 3600
+            ? Math.floor(r.durationSec/3600) + "h " + Math.floor((r.durationSec%3600)/60) + "m"
+            : Math.floor(r.durationSec/60) + "m " + (r.durationSec%60) + "s")
+        : "—";
+      card.innerHTML = `
+        <div class="meeting-card-info">
+          <h3>🎙 ${escapeHtml(r.meetingName)}</h3>
+          <p>${date} &nbsp;·&nbsp; ${dur} &nbsp;·&nbsp; ${r.sizeMb} MB &nbsp;·&nbsp; <code style="font-size:0.75rem;">${escapeHtml(r.filename)}</code></p>
+        </div>
+        <div class="meeting-card-actions">
+          <span class="badge" style="background:rgba(108,99,255,.15);color:#a78bfa;">Downloaded</span>
+          <button class="btn btn-ghost btn-sm" onclick="deleteRecording(${idx})" title="Remove from history">✕</button>
+        </div>
+      `;
+      list.appendChild(card);
+    });
+  } catch (_) {}
+}
+
+function deleteRecording(idx) {
+  try {
+    const recs = JSON.parse(localStorage.getItem("meetai_recordings") || "[]");
+    recs.splice(idx, 1);
+    localStorage.setItem("meetai_recordings", JSON.stringify(recs));
+    loadRecordings();
+    if (!recs.length) document.getElementById("recordingsSection").style.display = "none";
+  } catch (_) {}
+}
+
+function clearAllRecordings() {
+  if (!confirm("Remove all recordings from history?")) return;
+  localStorage.removeItem("meetai_recordings");
+  const section = document.getElementById("recordingsSection");
+  if (section) section.style.display = "none";
 }
 </script>
 </body>
