@@ -123,6 +123,10 @@ class WebRTCManager {
 
     pc.ontrack = evt => {
       const track = evt.track;
+      // Remove stale tracks of same kind so screen-share replacement shows immediately
+      remoteStream.getTracks()
+        .filter(t => t.kind === track.kind && t.id !== track.id)
+        .forEach(t => remoteStream.removeTrack(t));
       if (!remoteStream.getTracks().find(t => t.id === track.id)) remoteStream.addTrack(track);
       this.onRemoteStream(peerId, remoteStream);
       track.onunmute = () => this.onRemoteStream(peerId, remoteStream);
@@ -264,6 +268,8 @@ class WebRTCManager {
           const ans = await pc.createAnswer();
           await pc.setLocalDescription(ans);
           this._sendSignal(peerId, "answer", { sdp: ans.sdp, type: ans.type });
+          // Re-trigger so the video element immediately reflects the new/replaced track
+          if (this.remoteStreams[peerId]) this.onRemoteStream(peerId, this.remoteStreams[peerId]);
         } catch(e) { console.error("Re-offer:", e); }
         return;
       }
