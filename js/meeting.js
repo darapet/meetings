@@ -502,6 +502,16 @@ function setupPresenceDisplay() {
         b.textContent = "✋"; tile.appendChild(b);
         showToast("✋ " + (data.displayName || "Someone") + " raised their hand");
       } else if (!data.handRaised && existing) { existing.remove(); }
+      // Screen share badge — update in real-time without requiring a refresh
+      const existingScreenBadge = tile.querySelector(".screen-share-badge");
+      if (data.screenSharing && !existingScreenBadge) {
+        const sb = document.createElement("div");
+        sb.className = "screen-share-badge";
+        sb.textContent = "🖥 Sharing";
+        tile.appendChild(sb);
+      } else if (!data.screenSharing && existingScreenBadge) {
+        existingScreenBadge.remove();
+      }
     }
     updateParticipantSidebar();
   });
@@ -674,21 +684,83 @@ function sendChatMessage() {
 
 // ── AI broadcast ──────────────────────────────────────────
 function setupAIBroadcastListener() {
+  let _prevMicStateForAI = null;
+
+  // Show banner to ALL when AI is active (thinking/generating)
   db.ref("aiActivity/" + meetingId).on("value", snap => {
     const data   = snap.val();
-    const banner = document.getElementById("aiActivityBanner");
-    if (!data || !data.active || !data.uid) { if (banner) banner.style.display = "none"; return; }
-    if (data.uid === currentUser.uid)      { if (banner) banner.style.display = "none"; return; }
+    const banner = document.getElementById("aiBroadcastBanner");
+    const textEl = document.getElementById("aiBroadcastText");
+    if (!data || !data.active || !data.uid) {
+      // Only hide if not currently in speaking phase
+      db.ref("aiSpeaking/" + meetingId).once("value", ss => {
+        if (!ss.val()?.speaking) {
+          if (banner) banner.style.display = "none";
+          document.querySelectorAll("#participantGrid .participant-tile").forEach(t => t.classList.remove("ai-speaking"));
+        }
+      });
+      return;
+    }
+    // Show to ALL participants
     db.ref("presence/" + meetingId + "/" + data.uid).once("value", pSnap => {
       const name = pSnap.val()?.displayName || "Someone";
-      if (banner) { banner.textContent = "✦ " + name + " is using AI…"; banner.style.display = "flex"; }
+      if (textEl) textEl.textContent = (data.uid === currentUser.uid ? "MeetAI" : name + "'s MeetAI") + " is thinking…";
+      if (banner) banner.style.display = "flex";
     });
+    document.querySelectorAll("#participantGrid .participant-tile").forEach(t => t.classList.add("ai-speaking"));
+  });
+
+  // Mute/unmute mics based on AI speaking state — affects ALL participants
+  db.ref("aiSpeaking/" + meetingId).on("value", snap => {
+    const data   = snap.val();
+    const banner = document.getElementById("aiBroadcastBanner");
+    const textEl = document.getElementById("aiBroadcastText");
+
+    if (!data || !data.speaking) {
+      // AI stopped speaking — restore mics for non-summoners
+      if (_prevMicStateForAI !== null) {
+        audioEnabled = _prevMicStateForAI;
+        webrtc?.setAudioEnabled(audioEnabled);
+        if (typeof _syncMicIcon === "function") _syncMicIcon(audioEnabled);
+        _prevMicStateForAI = null;
+      }
+      // Hide banner only if AI activity also ended
+      db.ref("aiActivity/" + meetingId).once("value", as => {
+        if (!as.val()?.active) {
+          if (banner) banner.style.display = "none";
+          document.querySelectorAll("#participantGrid .participant-tile").forEach(t => t.classList.remove("ai-speaking"));
+        }
+      });
+      return;
+    }
+
+    // AI is speaking — show glowing banner to ALL
+    if (textEl) textEl.textContent = "✦ MeetAI is speaking — mics paused";
+    if (banner) banner.style.display = "flex";
+    document.querySelectorAll("#participantGrid .participant-tile").forEach(t => t.classList.add("ai-speaking"));
+
+    // Mute non-summoner mics
+    if (data.uid !== currentUser?.uid) {
+      if (_prevMicStateForAI === null) _prevMicStateForAI = audioEnabled;
+      if (audioEnabled) {
+        audioEnabled = false;
+        webrtc?.setAudioEnabled(false);
+        if (typeof _syncMicIcon === "function") _syncMicIcon(false);
+        showToast("✦ MeetAI is speaking — mic paused");
+      }
+    }
   });
 }
 
 function _broadcastAIActivity(active) {
   db.ref("aiActivity/" + meetingId).set(
     active ? { uid: currentUser.uid, active: true, ts: firebase.database.ServerValue.TIMESTAMP } : null
+  ).catch(() => {});
+}
+
+function _broadcastAISpeaking(speaking) {
+  db.ref("aiSpeaking/" + meetingId).set(
+    speaking ? { uid: currentUser.uid, speaking: true, ts: firebase.database.ServerValue.TIMESTAMP } : { speaking: false }
   ).catch(() => {});
 }
 
@@ -1233,17 +1305,38 @@ async function sendAIMessage(overrideText) {
       chatLog.appendChild(aiBubble);
       chatLog.scrollTop = chatLog.scrollHeight;
     }
-    aiManager.speak(reply);
+    if (indicator) indicator.style.display = "none";
+
+    // Mute summoner's own mic while AI speaks, just like other participants
+    const _summonerMicWasOn = audioEnabled;
+    if (audioEnabled) {
+      audioEnabled = false;
+      webrtc?.setAudioEnabled(false);
+      if (typeof _syncMicIcon === "function") _syncMicIcon(false);
+    }
+    // Broadcast speaking — triggers mic mute on all other clients via setupAIBroadcastListener
+    _broadcastAISpeaking(true);
+    aiManager.speak(reply, () => {
+      // Speech ended — clear speaking state and restore summoner mic
+      _broadcastAISpeaking(false);
+      _broadcastAIActivity(false);
+      if (_summonerMicWasOn && !audioEnabled) {
+        audioEnabled = true;
+        webrtc?.setAudioEnabled(true);
+        if (typeof _syncMicIcon === "function") _syncMicIcon(true);
+        showToast("✦ MeetAI finished — mic restored");
+      }
+    });
   } catch (err) {
+    if (indicator) indicator.style.display = "none";
+    _broadcastAIActivity(false);
+    _broadcastAISpeaking(false);
     if (chatLog) {
       const errBubble = document.createElement("div");
       errBubble.className = "ai-bubble ai-bubble-ai";
       errBubble.innerHTML = `<div class="ai-bubble-text">❌ ${escapeHtml(err.message)}</div>`;
       chatLog.appendChild(errBubble);
     }
-  } finally {
-    if (indicator) indicator.style.display = "none";
-    _broadcastAIActivity(false);
   }
 }
 
