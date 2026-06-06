@@ -771,6 +771,24 @@
 }
 .audio-unlock-btn:hover { background: rgba(255,255,255,0.08); }
 
+/* ── Screen share badge on participant tile ──────────────── */
+.screen-share-badge {
+  position: absolute;
+  bottom: 36px; left: 8px;
+  font-size: .72rem; font-weight: 700;
+  background: linear-gradient(135deg, rgba(108,99,255,0.88), rgba(139,92,246,0.88));
+  color: #fff;
+  padding: 3px 9px;
+  border-radius: 999px;
+  z-index: 3;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(167,139,250,0.4);
+  letter-spacing: .2px;
+  animation: screenBadgeIn .25s ease;
+}
+@keyframes screenBadgeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+
 /* ── Pet AI global banner ────────────────────────────────── */
 .petai-global-banner {
   position: fixed; top: 52px; left: 0; right: 0; z-index: 800;
