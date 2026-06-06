@@ -20,7 +20,7 @@ let remoteStreams   = new Map();
 let _meetingRef    = null;
 
 // ============================================================
-//  MEETING RECORDER — with pause / resume + auto-download
+//  MEETING RECORDER — audio-only, auto-download on end
 // ============================================================
 class MeetingRecorder {
   constructor() {
@@ -28,31 +28,26 @@ class MeetingRecorder {
     this.chunks        = [];
     this.isRecording   = false;
     this.isPaused      = false;
-    this.canvas        = document.createElement("canvas");
-    this.canvas.width  = 1280;
-    this.canvas.height = 720;
-    this.ctx           = this.canvas.getContext("2d");
     this.audioCtx      = null;
     this.dest          = null;
-    this.animId        = null;
     this.audioSources  = new Map();
+    this._startTime    = null;
   }
 
+  get durationMs() { return this._startTime ? Date.now() - this._startTime : 0; }
+
   start(localStream, remoteStreamMap) {
-    this.audioCtx = new AudioContext();
-    this.dest     = this.audioCtx.createMediaStreamDestination();
+    this.audioCtx  = new AudioContext();
+    this.dest      = this.audioCtx.createMediaStreamDestination();
     if (localStream) this._addAudio(localStream, "local");
     remoteStreamMap.forEach((stream, uid) => this._addAudio(stream, uid));
-    this._drawLoop();
 
-    const videoTrack  = this.canvas.captureStream(30).getVideoTracks()[0];
-    const audioTracks = this.dest.stream.getAudioTracks();
-    const combined    = new MediaStream(audioTracks.length ? [videoTrack, audioTracks[0]] : [videoTrack]);
-    const mimeType    = ["video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm"]
-      .find(t => MediaRecorder.isTypeSupported(t)) || "video/webm";
+    const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg"]
+      .find(t => MediaRecorder.isTypeSupported(t)) || "audio/webm";
 
     this.chunks        = [];
-    this.mediaRecorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 2_500_000 });
+    this._startTime    = Date.now();
+    this.mediaRecorder = new MediaRecorder(this.dest.stream, { mimeType });
     this.mediaRecorder.ondataavailable = e => { if (e.data?.size > 0) this.chunks.push(e.data); };
     this.mediaRecorder.start(1000);
     this.isRecording = true;
@@ -89,113 +84,16 @@ class MeetingRecorder {
 
   addRemoteStream(uid, stream) { if (this.isRecording) this._addAudio(stream, uid); }
 
-  _drawLoop() { this._drawFrame(); this.animId = requestAnimationFrame(() => this._drawLoop()); }
-
-  _drawFrame() {
-    const W = 1280, H = 720, ctx = this.ctx;
-    ctx.fillStyle = "#0d0f14";
-    ctx.fillRect(0, 0, W, H);
-
-    // Use screen share as main video if it is active
-    const screenVid  = document.getElementById("screenPreview");
-    const screenWrap = document.getElementById("screenPreviewWrap");
-    const screenActive = screenVid && screenVid.srcObject &&
-                         screenVid.videoWidth > 0 &&
-                         screenWrap?.style.display !== "none";
-
-    if (screenActive) {
-      const screenH = Math.floor(H * 0.78);
-      ctx.fillStyle = "#000";
-      ctx.fillRect(0, 0, W, screenH);
-      const sw = screenVid.videoWidth, sh = screenVid.videoHeight;
-      if (sw > 0 && sh > 0) {
-        const scale = Math.min(W / sw, screenH / sh);
-        const dw = sw * scale, dh = sh * scale;
-        ctx.drawImage(screenVid, (W - dw) / 2, (screenH - dh) / 2, dw, dh);
-      }
-      // Participant thumbnails in bottom strip
-      const thumbH = H - screenH - 4;
-      const tiles  = [...document.querySelectorAll("#participantGrid .participant-tile")];
-      const thumbW = tiles.length > 0 ? Math.min(Math.floor(W / tiles.length), 180) : 180;
-      tiles.forEach((tile, i) => {
-        const tx = i * thumbW, ty = screenH + 4;
-        ctx.fillStyle = "#1a1e2a";
-        ctx.fillRect(tx, ty, thumbW - 2, thumbH);
-        const vid2 = tile.querySelector("video");
-        if (vid2 && vid2.readyState >= 2 && vid2.videoWidth > 0) {
-          ctx.save(); ctx.beginPath(); ctx.rect(tx, ty, thumbW - 2, thumbH); ctx.clip();
-          const s2 = Math.max((thumbW - 2) / vid2.videoWidth, thumbH / vid2.videoHeight);
-          ctx.drawImage(vid2, tx + ((thumbW - 2) - vid2.videoWidth * s2) / 2,
-            ty + (thumbH - vid2.videoHeight * s2) / 2,
-            vid2.videoWidth * s2, vid2.videoHeight * s2);
-          ctx.restore();
-        }
-      });
-    } else {
-      // Normal participant grid
-      const tiles = [...document.querySelectorAll("#participantGrid .participant-tile")];
-      const count = tiles.length || 1;
-      const cols  = count === 1 ? 1 : count <= 2 ? 2 : count <= 4 ? 2 : 3;
-      const rows  = Math.ceil(count / cols);
-      const tw = W / cols, th = H / rows;
-      tiles.forEach((tile, i) => {
-        const col = i % cols, row = Math.floor(i / cols);
-        const x = col * tw, y = row * th;
-        ctx.fillStyle = "#1a1e2a";
-        ctx.fillRect(x, y, tw, th);
-        const vid = tile.querySelector("video");
-        if (vid && vid.readyState >= 2 && vid.videoWidth > 0) {
-          const scale = Math.max(tw / vid.videoWidth, th / vid.videoHeight);
-          const dw = vid.videoWidth * scale, dh = vid.videoHeight * scale;
-          ctx.save(); ctx.beginPath(); ctx.rect(x, y, tw, th); ctx.clip();
-          ctx.drawImage(vid, x + (tw - dw) / 2, y + (th - dh) / 2, dw, dh);
-          ctx.restore();
-        }
-        const nameEl = tile.querySelector(".tile-name");
-        if (nameEl) {
-          const name = nameEl.textContent.trim();
-          ctx.font = "bold 14px Inter, sans-serif";
-          const tw2 = ctx.measureText(name).width + 24;
-          ctx.fillStyle = "rgba(0,0,0,0.62)";
-          const lx = x + 10, ly = y + th - 36, lh = 26, r = 8;
-          ctx.beginPath();
-          ctx.moveTo(lx + r, ly); ctx.lineTo(lx + tw2 - r, ly);
-          ctx.quadraticCurveTo(lx + tw2, ly, lx + tw2, ly + r);
-          ctx.lineTo(lx + tw2, ly + lh - r);
-          ctx.quadraticCurveTo(lx + tw2, ly + lh, lx + tw2 - r, ly + lh);
-          ctx.lineTo(lx + r, ly + lh);
-          ctx.quadraticCurveTo(lx, ly + lh, lx, ly + lh - r);
-          ctx.lineTo(lx, ly + r);
-          ctx.quadraticCurveTo(lx, ly, lx + r, ly);
-          ctx.closePath(); ctx.fill();
-          ctx.fillStyle = "#fff"; ctx.fillText(name, lx + 12, ly + lh - 7);
-        }
-      });
-    }
-
-    // REC / PAUSED indicator
-    if (this.isPaused) {
-      ctx.fillStyle = "#f59e0b";
-      ctx.font = "bold 13px Inter, sans-serif";
-      ctx.fillText("⏸ PAUSED", W - 80, 27);
-    } else if (Math.floor(Date.now() / 700) % 2 === 0) {
-      ctx.fillStyle = "#ef4444";
-      ctx.beginPath(); ctx.arc(W - 36, 22, 8, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#fff"; ctx.font = "bold 13px Inter, sans-serif"; ctx.fillText("REC", W - 24, 27);
-    }
-  }
-
   stop() {
     return new Promise(resolve => {
       if (!this.mediaRecorder || this.mediaRecorder.state === "inactive") { resolve(null); return; }
       this.mediaRecorder.onstop = () => {
-        if (this.animId) cancelAnimationFrame(this.animId);
         if (this.audioCtx) this.audioCtx.close().catch(() => {});
         this.isRecording = false;
         this.isPaused    = false;
-        resolve(new Blob(this.chunks, { type: "video/webm" }));
+        const mimeType = this.mediaRecorder.mimeType || "audio/webm";
+        resolve(new Blob(this.chunks, { type: mimeType }));
       };
-      // Resume first if paused, then stop (ensures all chunks are flushed)
       if (this.mediaRecorder.state === "paused") this.mediaRecorder.resume();
       this.mediaRecorder.stop();
     });
@@ -231,6 +129,10 @@ async function initMeeting() {
     startMeetingTimer();
     if (isHost) try { listenForJoinRequests(); } catch (e) { console.error("WaitingRoom:", e); }
     try { initPetAI(); } catch (e) { console.error("PetAI:", e); }
+    // Auto-start audio recording for the host
+    if (isHost && webrtc?.localStream) {
+      try { startRecording(); } catch (e) { console.error("AutoRecord:", e); }
+    }
   });
 }
 
@@ -502,7 +404,7 @@ function setupPresenceDisplay() {
     const camIcon = document.getElementById("cam-" + uid);
     if (micIcon) micIcon.style.opacity = data.audio === false ? "0.3" : "1";
     if (camIcon) camIcon.style.opacity = data.video === false ? "0.3" : "1";
-    _setTileVideoVisible(uid, data.video !== false);
+    _setTileVideoVisible(uid, data.video !== false || !!data.screenSharing);
     if (data.networkQuality) _setTileNetworkQuality(uid, data.networkQuality, null);
     const tile = document.getElementById("tile-" + uid);
     if (tile) {
@@ -873,13 +775,29 @@ function _syncPauseIcon(recording, paused) {
   if (lbl) lbl.textContent = paused ? "Resume" : "Pause";
 }
 
-function _downloadRecording(blob) {
-  const name = (meetingData.name || "meeting").replace(/\s+/g, "-").toLowerCase();
-  const ts   = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
-  const url  = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement("a"), { href: url, download: name + "_" + ts + ".webm" });
+function _downloadRecording(blob, durationMs = 0) {
+  const name     = (meetingData.name || "meeting").replace(/\s+/g, "-").toLowerCase();
+  const ts       = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
+  const ext      = blob.type.includes("ogg") ? ".ogg" : ".webm";
+  const filename = name + "_" + ts + ext;
+  const url      = URL.createObjectURL(blob);
+  const a        = Object.assign(document.createElement("a"), { href: url, download: filename });
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 5000);
+  // Save metadata to localStorage so the dashboard can show the recording history
+  try {
+    const recs = JSON.parse(localStorage.getItem("meetai_recordings") || "[]");
+    recs.unshift({
+      meetingId,
+      meetingName: meetingData.name || "Meeting",
+      filename,
+      date:        new Date().toISOString(),
+      sizeMb:      (blob.size / (1024 * 1024)).toFixed(1),
+      durationSec: Math.round(durationMs / 1000),
+    });
+    if (recs.length > 30) recs.length = 30;
+    localStorage.setItem("meetai_recordings", JSON.stringify(recs));
+  } catch (_) {}
 }
 
 // ── Waiting room ──────────────────────────────────────────
@@ -972,9 +890,10 @@ function hostMuteParticipant(uid) {
 async function leaveMeeting() {
   if (!confirm("Leave this meeting?")) return;
   if (recorder && recorder.isRecording) {
+    const durationMs = recorder.durationMs;
     const blob = await recorder.stop();
-    if (blob && blob.size > 0) _downloadRecording(blob);
     recorder = null;
+    if (blob && blob.size > 0) _downloadRecording(blob, durationMs);
   }
   _broadcastAIActivity(null);
   await _cleanup();
@@ -986,9 +905,10 @@ async function endMeeting() {
   if (!confirm("End this meeting for everyone?")) return;
   // Auto-download any active recording first
   if (recorder && recorder.isRecording) {
+    const durationMs = recorder.durationMs;
     const blob = await recorder.stop();
     recorder   = null;
-    if (blob && blob.size > 0) _downloadRecording(blob);
+    if (blob && blob.size > 0) _downloadRecording(blob, durationMs);
   }
   await _finishEndMeeting();
 }
