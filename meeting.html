@@ -364,7 +364,7 @@
       <span class="control-btn-label">Pet AI</span>
     </div>
     <div class="ctrl-item">
-      <button class="control-btn" id="sameRoomBtn" onclick="toggleSameRoomMode()" title="Same-Room Mode (mute remote audio to prevent echo)">
+      <button class="control-btn" id="sameRoomBtn" onclick="openSameRoomDialog()" title="Same-Room Mode — locally mute participants in the same physical space">
         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
           <circle cx="9" cy="7" r="4"/>
@@ -460,6 +460,21 @@
       <button class="btn btn-primary" onclick="sendAIMessage()">
         <svg width="15" height="15"><use href="#ic-send"/></svg>
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- SAME ROOM DIALOG -->
+<div class="same-room-overlay" id="sameRoomOverlay" onclick="if(event.target===this)closeSameRoomDialog()">
+  <div class="same-room-dialog">
+    <div class="same-room-dialog-header">
+      <h3>👥 Same Room</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeSameRoomDialog()">✕</button>
+    </div>
+    <p>Select people who are physically in the same room as you. Their audio will be muted locally to stop echo.</p>
+    <div id="sameRoomList"></div>
+    <div class="same-room-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeSameRoomDialog()">Done</button>
     </div>
   </div>
 </div>
