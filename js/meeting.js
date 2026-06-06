@@ -287,12 +287,24 @@ function attachLocalStream(stream) {
 function onRemoteStream(peerId, stream) {
   remoteStreams.set(peerId, stream);
   if (recorder && recorder.isRecording) recorder.addRemoteStream(peerId, stream);
+
+  // If this participant's tile already exists, update the video immediately
+  // without a Firebase round-trip — critical for screen share track swaps
+  if (participants[peerId]) {
+    const data = participants[peerId];
+    addParticipantTile(peerId, data.displayName || "Participant", data.photoURL || "", false, stream);
+    // Force video element to restart playback so the new track renders right away
+    const vidEl = document.getElementById("vid-" + peerId);
+    if (vidEl) { vidEl.srcObject = stream; vidEl.play().catch(() => {}); }
+    return;
+  }
+
+  // New participant — must fetch presence data first
   db.ref("presence/" + meetingId + "/" + peerId).once("value", snap => {
-    const data   = snap.val() || {};
-    const wasNew = !participants[peerId];
+    const data = snap.val() || {};
     participants[peerId] = data;
     addParticipantTile(peerId, data.displayName || "Participant", data.photoURL || "", false, stream);
-    if (wasNew && data.displayName) showToast("✦ " + data.displayName + " joined");
+    if (data.displayName) showToast("✦ " + data.displayName + " joined");
     updateParticipantSidebar();
   });
 }
