@@ -115,16 +115,21 @@
   <div class="lobby-logo">Meet<span>AI</span></div>
 
   <div class="lobby-card" id="lobbyCard">
-    <!-- Step 1: Name input (shown if guest) -->
+    <!-- Step 1: Name + Email input (shown if guest) -->
     <div class="name-step" id="nameStep" style="display:none;">
-      <h2>What's your name?</h2>
-      <p>This is how other participants will see you in the meeting.</p>
-      <div class="name-input-wrap">
-        <input class="input" id="displayNameInput" placeholder="Your full name" maxlength="60"
-          onkeydown="if(event.key==='Enter') confirmName()">
-        <button class="btn btn-primary" onclick="confirmName()">Continue</button>
+      <h2>Join the meeting</h2>
+      <p>Enter your details to let the host know who you are.</p>
+      <div class="input-group" style="margin-bottom:10px;">
+        <input class="input" id="displayNameInput" placeholder="Your full name" maxlength="60" style="width:100%;"
+          onkeydown="if(event.key==='Enter') document.getElementById('emailInput').focus()">
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="window.location.href='dashboard.html'" style="margin-top:16px;">← Back</button>
+      <div class="input-group" style="margin-bottom:10px;">
+        <input class="input" type="email" id="emailInput" placeholder="Your email address" maxlength="120" style="width:100%;"
+          onkeydown="if(event.key==='Enter') confirmName()">
+      </div>
+      <div id="customFieldsStep1" style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px;"></div>
+      <button class="btn btn-primary btn-block" onclick="confirmName()" style="width:100%;">Continue →</button>
+      <button class="btn btn-ghost btn-sm" onclick="window.location.href='dashboard.html'" style="margin-top:12px;">← Back</button>
     </div>
 
     <!-- Step 2: Device test + waiting room -->
@@ -173,14 +178,16 @@
 <script src="js/config.js"></script>
 <script src="js/auth.js"></script>
 <script>
-let meetingId   = null;
-let currentUser = null;
-let localStream = null;
-let micOn       = true;
-let camOn       = true;
-let requestRef  = null;
-let _micAnalyser = null;
-let _micAnimId   = null;
+let meetingId     = null;
+let currentUser   = null;
+let localStream   = null;
+let micOn         = true;
+let camOn         = true;
+let requestRef    = null;
+let _micAnalyser  = null;
+let _micAnimId    = null;
+let _customFields = [];   // host-defined extra fields
+let _fieldValues  = {};   // { label: value } for current guest
 
 function getInitials(name) {
   if (!name) return "?";
@@ -230,34 +237,76 @@ onAuthReady(async user => {
     return;
   }
 
-  // Decide whether to show name step
-  const hasName = user.displayName && user.displayName.trim().length > 2 && user.displayName !== "Anonymous";
-  if (hasName) {
-    showStep2();
-    await startPreview();
-    await placeJoinRequest(meetingData.name || "Meeting", user);
-  } else {
-    // Show name input
-    const input = document.getElementById("displayNameInput");
-    if (input && user.displayName) input.value = user.displayName;
-    document.getElementById("nameStep").style.display = "block";
-  }
+  // Load custom fields from meeting settings
+  try {
+    const cfSnap = await db.ref("meetings/" + meetingId + "/settings/customFields").once("value");
+    _customFields = cfSnap.val() || [];
+    _renderCustomFields();
+  } catch (_) {}
+
+  // Always show name/email step so email can be collected
+  const input = document.getElementById("displayNameInput");
+  if (input && user.displayName && user.displayName !== "Anonymous") input.value = user.displayName;
+  // Pre-fill email if known
+  const emailInput = document.getElementById("emailInput");
+  if (emailInput && user.email) emailInput.value = user.email;
+  document.getElementById("nameStep").style.display = "block";
 });
 
-// ── Step 1: Confirm name ──────────────────────────────────
+// ── Render custom fields in step 1 ───────────────────────
+function _renderCustomFields() {
+  const container = document.getElementById("customFieldsStep1");
+  if (!container) return;
+  container.innerHTML = "";
+  _customFields.forEach((f, i) => {
+    const wrap = document.createElement("div");
+    const label = f.label || ("Field " + (i + 1));
+    if (f.type === "select" && f.options) {
+      const opts = f.options.split(",").map(s => s.trim()).filter(Boolean);
+      wrap.innerHTML = `<select class="input" id="cf_${i}" style="width:100%">
+        <option value="">— ${escapeHtml(label)} —</option>
+        ${opts.map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join("")}
+      </select>`;
+    } else if (f.type === "email") {
+      wrap.innerHTML = `<input class="input" type="email" id="cf_${i}" placeholder="${escapeHtml(label)}" style="width:100%">`;
+    } else if (f.type === "phone") {
+      wrap.innerHTML = `<input class="input" type="tel" id="cf_${i}" placeholder="${escapeHtml(label)}" style="width:100%">`;
+    } else if (f.type === "number") {
+      wrap.innerHTML = `<input class="input" type="number" id="cf_${i}" placeholder="${escapeHtml(label)}" style="width:100%">`;
+    } else {
+      wrap.innerHTML = `<input class="input" type="text" id="cf_${i}" placeholder="${escapeHtml(label)}" style="width:100%">`;
+    }
+    container.appendChild(wrap);
+  });
+}
+
+// ── Step 1: Confirm name + email ──────────────────────────
 async function confirmName() {
-  const input = document.getElementById("displayNameInput");
-  const name  = (input?.value || "").trim();
-  if (!name) { input?.focus(); return; }
+  const nameInput  = document.getElementById("displayNameInput");
+  const emailInput = document.getElementById("emailInput");
+  const name  = (nameInput?.value  || "").trim();
+  const email = (emailInput?.value || "").trim();
+
+  if (!name)  { nameInput?.focus();  return; }
+  if (!email || !email.includes("@")) { emailInput?.focus(); emailInput?.setCustomValidity("Please enter a valid email"); emailInput?.reportValidity(); return; }
+  if (emailInput) emailInput.setCustomValidity("");
+
+  // Collect custom field values
+  _fieldValues = {};
+  _customFields.forEach((f, i) => {
+    const el = document.getElementById("cf_" + i);
+    if (el && f.label && el.value.trim()) _fieldValues[f.label] = el.value.trim();
+  });
 
   // Save name to Firebase Auth profile
   try {
     await auth.currentUser.updateProfile({ displayName: name });
     currentUser = auth.currentUser;
   } catch (_) {
-    // If update fails, use the name locally
     currentUser = { ...currentUser, displayName: name };
   }
+  // Store email for use in join request
+  currentUser._email = email;
 
   document.getElementById("nameStep").style.display = "none";
   showStep2();
@@ -361,13 +410,16 @@ function toggleCam() {
 // ── Join request (waiting room) ───────────────────────────
 async function placeJoinRequest(meetingName, user) {
   requestRef = db.ref("joinRequests/" + meetingId + "/" + user.uid);
-  await requestRef.set({
-    uid:         user.uid,
-    displayName: user.displayName || "Guest",
-    photoURL:    user.photoURL    || "",
-    requestedAt: firebase.database.ServerValue.TIMESTAMP,
-    status:      "pending"
-  });
+  const payload = {
+    uid:          user.uid,
+    displayName:  user.displayName || "Guest",
+    photoURL:     user.photoURL    || "",
+    email:        user._email || user.email || "",
+    requestedAt:  firebase.database.ServerValue.TIMESTAMP,
+    status:       "pending"
+  };
+  if (Object.keys(_fieldValues).length) payload.customFields = _fieldValues;
+  await requestRef.set(payload);
   requestRef.onDisconnect().remove();
   showWaitingStatus(meetingName);
 

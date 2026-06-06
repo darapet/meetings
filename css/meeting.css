@@ -431,3 +431,174 @@
 .p-net-badge.net-fair  { color:#f59e0b; }
 .p-net-badge.net-poor  { color:#ef4444; }
 .p-net-badge.net-reconnecting { color:#a78bfa; }
+
+/* ============================================================
+   PET AI — Tesla-style glowing orb + panel
+   ============================================================ */
+.petai-overlay {
+  position: fixed; inset: 0; z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.55); backdrop-filter: blur(6px);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.petai-overlay.visible {
+  opacity: 1; pointer-events: all;
+}
+
+.petai-panel {
+  position: relative;
+  width: 420px; max-width: 95vw;
+  background: linear-gradient(160deg, #12141f 0%, #0d0f1a 100%);
+  border: 1px solid rgba(108,99,255,0.35);
+  border-radius: 20px;
+  padding: 28px 24px 20px;
+  box-shadow: 0 0 60px rgba(108,99,255,0.3), 0 20px 60px rgba(0,0,0,0.6);
+  display: flex; flex-direction: column; gap: 16px;
+  max-height: 90vh;
+}
+
+.petai-close {
+  position: absolute; top: 14px; right: 14px;
+  background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3);
+  color: #ef4444; border-radius: 8px; padding: 4px 8px;
+  cursor: pointer; font-size: 0.8rem; font-weight: 700;
+  transition: all 0.2s;
+}
+.petai-close:hover { background: rgba(239,68,68,0.3); }
+
+/* ── Orb ──────────────────────────────────────────────── */
+.petai-orb-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+
+.petai-orb {
+  position: relative; width: 100px; height: 100px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.petai-ring {
+  position: absolute; border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: rgba(108,99,255,0.8);
+  border-right-color: rgba(108,99,255,0.3);
+  animation: orbSpin 2s linear infinite;
+}
+.petai-ring.r1 { width: 100px; height: 100px; animation-duration: 2.4s; }
+.petai-ring.r2 { width:  78px; height:  78px; animation-duration: 1.8s; animation-direction: reverse;
+  border-top-color: rgba(139,92,246,0.7); border-right-color: rgba(139,92,246,0.2); }
+.petai-ring.r3 { width:  58px; height:  58px; animation-duration: 3.2s;
+  border-top-color: rgba(167,139,250,0.6); border-right-color: rgba(167,139,250,0.15); }
+
+@keyframes orbSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.petai-core {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+}
+.petai-star {
+  font-size: 1.6rem; color: #a78bfa;
+  animation: starPulse 1.8s ease-in-out infinite;
+  filter: drop-shadow(0 0 8px rgba(167,139,250,0.8));
+}
+
+/* State-based animations */
+.petai-orb[data-state="thinking"] .petai-star { animation: starThink 0.6s ease-in-out infinite alternate; }
+.petai-orb[data-state="speaking"] .petai-star { animation: starSpeak 0.4s ease-in-out infinite alternate; }
+.petai-orb[data-state="listening"] .petai-ring { border-top-color: rgba(34,197,94,0.8); }
+.petai-orb[data-state="listening"] .petai-star { color: #86efac; filter: drop-shadow(0 0 8px rgba(34,197,94,0.7)); }
+.petai-orb[data-state="speaking"] .petai-ring  { border-top-color: rgba(251,191,36,0.9); animation-duration: 0.8s; }
+.petai-orb[data-state="speaking"] .petai-star  { color: #fde68a; filter: drop-shadow(0 0 12px rgba(251,191,36,0.8)); }
+.petai-orb[data-state="thinking"] .petai-ring  { border-top-color: rgba(96,165,250,0.9); animation-duration: 1.2s; }
+.petai-orb[data-state="thinking"] .petai-star  { color: #93c5fd; filter: drop-shadow(0 0 10px rgba(96,165,250,0.8)); }
+
+@keyframes starPulse { 0%,100%{transform:scale(1);opacity:.9} 50%{transform:scale(1.2);opacity:1} }
+@keyframes starThink { 0%{transform:scale(0.9);opacity:.6} 100%{transform:scale(1.1);opacity:1} }
+@keyframes starSpeak { 0%{transform:scale(0.95)} 100%{transform:scale(1.15)} }
+
+/* Outer glow on panel when active */
+.petai-orb-wrap::before {
+  content: "";
+  position: absolute;
+  width: 140px; height: 140px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(108,99,255,0.2) 0%, transparent 70%);
+  pointer-events: none;
+  animation: glowPulse 2.5s ease-in-out infinite;
+}
+@keyframes glowPulse { 0%,100%{opacity:.5;transform:scale(1)} 50%{opacity:1;transform:scale(1.15)} }
+
+.petai-status-label {
+  font-size: 0.82rem; font-weight: 600; color: var(--accent);
+  letter-spacing: 0.05em; text-transform: uppercase;
+}
+
+/* ── Chat ─────────────────────────────────────────────── */
+.petai-chat {
+  max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+  padding: 10px; background: rgba(0,0,0,0.25); border-radius: 10px;
+  border: 1px solid var(--border);
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+.petai-msg {
+  font-size: 0.84rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+  padding: 8px 10px; border-radius: 8px;
+}
+.petai-msg-ai   { background: rgba(108,99,255,0.12); color: var(--text-primary); border-left: 3px solid var(--accent); }
+.petai-msg-user { background: rgba(255,255,255,0.06); color: var(--text-secondary); text-align: right; border-right: 3px solid var(--border); }
+
+/* ── Input ────────────────────────────────────────────── */
+.petai-input-row {
+  display: flex; gap: 8px;
+}
+.petai-text-input { flex: 1; font-size: 0.88rem; }
+
+/* ── Quick buttons ────────────────────────────────────── */
+.petai-quick-btns {
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+.btn-xs {
+  padding: 5px 10px !important; font-size: 0.76rem !important;
+}
+
+/* ── Host Settings Modal ──────────────────────────────── */
+.host-settings-modal-overlay {
+  position: fixed; inset: 0; z-index: 8000;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(5px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.25s;
+}
+.host-settings-modal-overlay.open {
+  opacity: 1; pointer-events: all;
+}
+.host-settings-modal {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 28px 24px;
+  width: 520px; max-width: 95vw; max-height: 85vh;
+  overflow-y: auto; display: flex; flex-direction: column; gap: 20px;
+}
+.host-settings-modal h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 4px; }
+.host-settings-section { display: flex; flex-direction: column; gap: 10px; }
+.host-settings-section h4 { font-size: 0.88rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .05em; }
+.custom-field-row {
+  display: flex; gap: 8px; align-items: center;
+}
+.custom-field-row .input { flex: 1; font-size: 0.85rem; }
+.custom-field-row select { font-size: 0.85rem; padding: 7px 10px; }
+.host-settings-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+
+/* ── Waiting room popup (toast style) ────────────────── */
+.waiting-room-popup {
+  position: fixed; bottom: 80px; right: 20px; z-index: 7000;
+  background: var(--bg-card); border: 1px solid var(--border-accent);
+  border-radius: var(--radius-lg); padding: 14px 16px;
+  width: 280px; box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  animation: slideInRight 0.3s ease;
+}
+@keyframes slideInRight { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+.wr-popup-header { font-size: 0.82rem; font-weight: 600; color: var(--accent); margin-bottom: 6px; }
+.wr-popup-name   { font-size: 0.95rem; font-weight: 700; margin-bottom: 10px; }
+.wr-popup-btns   { display: flex; gap: 8px; }

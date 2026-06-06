@@ -205,6 +205,9 @@
     <button class="btn btn-ghost btn-sm" onclick="toggleAIToolsVisibility()" id="toggleAIVisBtn">
       <svg width="13" height="13"><use href="#ic-eye-off"/></svg> Hide AI
     </button>
+    <button class="btn btn-ghost btn-sm" onclick="openHostSettings()" title="Configure waiting room fields and Pet AI permissions">
+      ⚙ Settings
+    </button>
     <button class="btn btn-danger btn-sm" onclick="endMeeting()">
       <svg width="13" height="13"><use href="#ic-square-stop"/></svg> End Meeting
     </button>
@@ -354,6 +357,24 @@
       <span class="control-btn-label">Ask AI</span>
     </div>
     <div class="ctrl-item">
+      <button class="control-btn" onclick="togglePetAI()" title="Pet AI — voice assistant (say 'Pet AI' to summon)"
+        style="background:rgba(167,139,250,0.15);color:#a78bfa;">
+        <span style="font-size:1.3rem;line-height:1;">✦</span>
+      </button>
+      <span class="control-btn-label">Pet AI</span>
+    </div>
+    <div class="ctrl-item">
+      <button class="control-btn" id="sameRoomBtn" onclick="toggleSameRoomMode()" title="Same-Room Mode (mute remote audio to prevent echo)">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </button>
+      <span class="control-btn-label">Same Room</span>
+    </div>
+    <div class="ctrl-item">
       <button class="control-btn" id="raiseHandBtn" onclick="toggleRaiseHand()" title="Raise Hand">
         <svg width="22" height="22"><use href="#ic-hand"/></svg>
       </button>
@@ -443,6 +464,35 @@
   </div>
 </div>
 
+<!-- HOST SETTINGS MODAL -->
+<div class="host-settings-modal-overlay" id="hostSettingsOverlay" onclick="if(event.target===this)closeHostSettings()">
+  <div class="host-settings-modal">
+    <h3>⚙ Host Settings</h3>
+    <p style="font-size:.85rem;color:var(--text-secondary);margin:0 0 4px;">Configure the waiting room and Pet AI permissions.</p>
+
+    <div class="host-settings-section">
+      <h4>Pet AI — who can summon</h4>
+      <select class="input" id="aiSummonPermission" style="max-width:260px;">
+        <option value="everyone">Everyone</option>
+        <option value="unmuted">Host + unmuted participants</option>
+        <option value="host">Host only</option>
+      </select>
+    </div>
+
+    <div class="host-settings-section">
+      <h4>Waiting room — custom fields (up to 10)</h4>
+      <p style="font-size:.8rem;color:var(--text-muted);margin:0 0 8px;">Guests fill these out before knocking. Name and email are always required.</p>
+      <div id="customFieldsList" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <button class="btn btn-ghost btn-sm" onclick="addCustomField()" style="margin-top:8px;align-self:flex-start;">+ Add Field</button>
+    </div>
+
+    <div class="host-settings-footer">
+      <button class="btn btn-ghost" onclick="closeHostSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveHostSettings()">Save Settings</button>
+    </div>
+  </div>
+</div>
+
 <div id="meetingError"></div>
 <div class="spinner-overlay" id="authSpinner" style="display:none;"><div class="spinner"></div></div>
 
@@ -457,6 +507,7 @@
 <script src="js/webrtc.js"></script>
 <script src="js/transcription.js"></script>
 <script src="js/ai.js"></script>
+<script src="js/pet-ai.js"></script>
 <script src="js/meeting.js"></script>
 <script>
 // ── Sidebar tabs ──────────────────────────────────────────

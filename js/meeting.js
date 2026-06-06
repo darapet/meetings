@@ -187,6 +187,8 @@ async function initMeeting() {
     try { setupAIBroadcastListener(); } catch (e) { console.error("AI Broadcast:", e); }
     updateHostControls();
     startMeetingTimer();
+    if (isHost) try { listenForJoinRequests(); } catch (e) { console.error("WaitingRoom:", e); }
+    try { initPetAI(); } catch (e) { console.error("PetAI:", e); }
   });
 }
 
@@ -712,14 +714,52 @@ function showAdmissionRequest(uid, data) {
   const photo = data.photoURL
     ? `<img src="${data.photoURL}" class="adm-photo" alt="">`
     : `<div class="adm-photo adm-initials">${escapeHtml(getInitials(data.displayName || "?"))}</div>`;
+
+  // Build extra info (email + custom fields if present)
+  let extraInfo = "";
+  if (data.email) extraInfo += `<div class="adm-extra">✉ ${escapeHtml(data.email)}</div>`;
+  if (data.customFields && typeof data.customFields === "object") {
+    Object.entries(data.customFields).forEach(([label, val]) => {
+      if (val) extraInfo += `<div class="adm-extra">${escapeHtml(label)}: ${escapeHtml(String(val))}</div>`;
+    });
+  }
+
   card.innerHTML = `${photo}
-    <div class="adm-info"><div class="adm-name">${escapeHtml(data.displayName || "Guest")}</div><div class="adm-sub">wants to join</div></div>
+    <div class="adm-info">
+      <div class="adm-name">${escapeHtml(data.displayName || "Guest")}</div>
+      <div class="adm-sub">wants to join</div>
+      ${extraInfo}
+    </div>
     <div class="adm-actions">
       <button class="btn btn-success btn-sm" onclick="admitGuest('${uid}')">Admit</button>
       <button class="btn btn-danger  btn-sm" onclick="declineGuest('${uid}')">Decline</button>
     </div>`;
   container.appendChild(card); container.style.display = "flex";
-  showToast("🔔 " + (data.displayName || "Someone") + " is waiting");
+
+  // Sound notification
+  _playNotificationBeep();
+
+  // Floating popup notification
+  _showWaitingRoomPopup(uid, data);
+}
+
+function _showWaitingRoomPopup(uid, data) {
+  // Remove any existing popup for this user
+  document.getElementById("wrpopup-" + uid)?.remove();
+  const popup = document.createElement("div");
+  popup.id = "wrpopup-" + uid;
+  popup.className = "waiting-room-popup";
+  popup.innerHTML = `
+    <div class="wr-popup-header">🔔 Waiting Room</div>
+    <div class="wr-popup-name">${escapeHtml(data.displayName || "Guest")} wants to join</div>
+    <div class="wr-popup-btns">
+      <button class="btn btn-success btn-sm" onclick="admitGuest('${uid}');document.getElementById('wrpopup-${uid}')?.remove()">Admit</button>
+      <button class="btn btn-danger  btn-sm" onclick="declineGuest('${uid}');document.getElementById('wrpopup-${uid}')?.remove()">Decline</button>
+      <button class="btn btn-ghost   btn-sm" onclick="document.getElementById('wrpopup-${uid}')?.remove()">✕</button>
+    </div>`;
+  document.body.appendChild(popup);
+  // Auto-dismiss after 30 seconds
+  setTimeout(() => popup.remove(), 30000);
 }
 
 function admitGuest(uid) {
@@ -830,4 +870,166 @@ function escapeHtml(str) {
 function _markdownToHtml(text) {
   return text.replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>").replace(/\*(.*?)\*/g,"<em>$1</em>")
              .replace(/`(.*?)`/g,"<code>$1</code>").replace(/\n/g,"<br>");
+}
+
+// ── Fix: toggleAudio is called by the HTML button ─────────
+// The function was named toggleMic() — this alias fixes it
+function toggleAudio() { toggleMic(); }
+
+// ── Host Settings ─────────────────────────────────────────
+let _hostSettingsOpen = false;
+let _customFields = [];
+
+function openHostSettings() {
+  if (!isHost) return;
+  _hostSettingsOpen = true;
+  document.getElementById("hostSettingsOverlay")?.classList.add("open");
+  _loadHostSettings();
+}
+
+function closeHostSettings() {
+  _hostSettingsOpen = false;
+  document.getElementById("hostSettingsOverlay")?.classList.remove("open");
+}
+
+async function _loadHostSettings() {
+  try {
+    const snap = await db.ref("meetings/" + meetingId + "/settings").once("value");
+    const s = snap.val() || {};
+    _customFields = s.customFields || [];
+    const perm = s.aiSummonPermission || "everyone";
+    const el = document.getElementById("aiSummonPermission");
+    if (el) el.value = perm;
+    _renderCustomFieldRows();
+  } catch (_) {}
+}
+
+function _renderCustomFieldRows() {
+  const container = document.getElementById("customFieldsList");
+  if (!container) return;
+  container.innerHTML = "";
+  _customFields.forEach((f, i) => {
+    const row = document.createElement("div");
+    row.className = "custom-field-row";
+    row.innerHTML = `
+      <input class="input" placeholder="Field label" value="${escapeHtml(f.label || "")}"
+        oninput="window._customFields[${i}].label=this.value">
+      <select class="input" style="max-width:110px"
+        onchange="window._customFields[${i}].type=this.value">
+        ${["text","email","phone","number","select"].map(t =>
+          `<option value="${t}"${f.type===t?" selected":""}>${t}</option>`
+        ).join("")}
+      </select>
+      <input class="input" placeholder="Options (comma-sep, if select)" value="${escapeHtml(f.options||"")}"
+        style="max-width:130px" oninput="window._customFields[${i}].options=this.value">
+      <button class="btn btn-danger btn-sm" onclick="window._removeCustomField(${i})">✕</button>`;
+    container.appendChild(row);
+  });
+}
+
+window._removeCustomField = function(i) {
+  _customFields.splice(i, 1);
+  _renderCustomFieldRows();
+};
+
+function addCustomField() {
+  if (_customFields.length >= 10) { showToast("Maximum 10 custom fields"); return; }
+  _customFields.push({ label: "", type: "text", options: "" });
+  _renderCustomFieldRows();
+}
+
+async function saveHostSettings() {
+  if (!isHost) return;
+  const permEl = document.getElementById("aiSummonPermission");
+  const perm   = permEl?.value || "everyone";
+  const fields = _customFields.filter(f => f.label.trim());
+  try {
+    await db.ref("meetings/" + meetingId + "/settings").set({
+      aiSummonPermission: perm,
+      customFields: fields
+    });
+    showToast("Settings saved");
+    closeHostSettings();
+  } catch (e) {
+    showToast("Failed to save settings");
+  }
+}
+
+// ── Pet AI ────────────────────────────────────────────────
+let petAI = null;
+window.petAI = null;
+
+function initPetAI() {
+  if (typeof PetAI === "undefined") return;
+  petAI = new PetAI(meetingId, {
+    getTranscript:   () => transcription?.getFullText() || "",
+    getSummary:      () => document.getElementById("summaryContent")?.innerText || "",
+    isHost:          () => isHost,
+    isAudioEnabled:  () => audioEnabled
+  });
+  window.petAI = petAI;
+  petAI.startWakeWordDetection();
+}
+
+function togglePetAI() {
+  if (!petAI) return;
+  if (petAI.active) { petAI.stop(); }
+  else {
+    if (!petAI.canSummon()) { showToast("Pet AI is restricted by the host"); return; }
+    petAI._summon();
+  }
+}
+
+// ── Notification sound (waiting room) ────────────────────
+function _playNotificationBeep() {
+  try {
+    const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = "sine"; osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.45, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.65);
+    osc.onended = () => ctx.close();
+    // Second beep
+    setTimeout(() => {
+      try {
+        const ctx2  = new (window.AudioContext || window.webkitAudioContext)();
+        const osc2  = ctx2.createOscillator();
+        const gain2 = ctx2.createGain();
+        osc2.connect(gain2); gain2.connect(ctx2.destination);
+        osc2.type = "sine"; osc2.frequency.value = 1100;
+        gain2.gain.setValueAtTime(0, ctx2.currentTime);
+        gain2.gain.linearRampToValueAtTime(0.35, ctx2.currentTime + 0.02);
+        gain2.gain.exponentialRampToValueAtTime(0.001, ctx2.currentTime + 0.5);
+        osc2.start(ctx2.currentTime);
+        osc2.stop(ctx2.currentTime + 0.55);
+        osc2.onended = () => ctx2.close();
+      } catch (_) {}
+    }, 200);
+  } catch (_) {}
+}
+
+// ── Same-room echo fix: mute/unmute all remote audio ──────
+let _sameRoomMode = false;
+function toggleSameRoomMode() {
+  _sameRoomMode = !_sameRoomMode;
+  document.querySelectorAll(".remote-video").forEach(v => {
+    if (v.tagName === "VIDEO") v.muted = _sameRoomMode;
+  });
+  // Also get any video elements inside tile wrappers
+  document.querySelectorAll("#videoGrid video:not(#localVideo)").forEach(v => {
+    v.muted = _sameRoomMode;
+  });
+  const btn = document.getElementById("sameRoomBtn");
+  if (btn) {
+    btn.classList.toggle("active", _sameRoomMode);
+    btn.title = _sameRoomMode ? "Same-Room Mode ON (remote audio muted)" : "Same-Room Mode (mute remote audio)";
+  }
+  showToast(_sameRoomMode
+    ? "Same-room mode ON — remote audio muted to prevent echo"
+    : "Same-room mode OFF — remote audio restored");
 }
