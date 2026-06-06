@@ -86,6 +86,34 @@
     .dot-warn { display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning); }
     .dot-err  { display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger); }
 
+    /* Active meeting banner */
+    .active-meeting-banner {
+      display: none;
+      background: linear-gradient(135deg, rgba(108,99,255,0.18), rgba(108,99,255,0.08));
+      border: 1.5px solid var(--border-accent);
+      border-radius: var(--radius-lg);
+      padding: 20px 24px;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .active-meeting-banner.visible { display: flex; }
+    .amb-pulse {
+      width: 12px; height: 12px; border-radius: 50%; background: var(--success); flex-shrink: 0;
+      box-shadow: 0 0 0 0 rgba(34,197,94,.6);
+      animation: amblive 1.4s ease-in-out infinite;
+    }
+    @keyframes amblive {
+      0%   { box-shadow: 0 0 0 0 rgba(34,197,94,.55); }
+      70%  { box-shadow: 0 0 0 8px rgba(34,197,94,0); }
+      100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+    }
+    .amb-info { flex: 1; min-width: 0; }
+    .amb-label { font-size: .72rem; font-weight: 600; color: var(--success); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 3px; }
+    .amb-name  { font-size: 1.05rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .amb-sub   { font-size: .78rem; color: var(--text-muted); margin-top: 2px; }
+    .amb-actions { display: flex; gap: 10px; flex-shrink: 0; }
+
     @media (max-width: 900px) { .dash-body { grid-template-columns: 1fr; } .dash-sidebar { order: 2; } }
     @media (max-width: 560px) { .quick-actions { grid-template-columns: 1fr; } }
   </style>
@@ -143,6 +171,20 @@
       <div>
         <h1>Good <span id="greeting">day</span>, <span id="firstName">there</span> 👋</h1>
         <p>Ready for your next meeting? Start or schedule in one click.</p>
+      </div>
+
+      <!-- Active Meeting Banner — shown when host has a live meeting -->
+      <div class="active-meeting-banner" id="activeMeetingBanner">
+        <div class="amb-pulse"></div>
+        <div class="amb-info">
+          <div class="amb-label">● Live Now</div>
+          <div class="amb-name" id="activeMeetingName">Meeting</div>
+          <div class="amb-sub" id="activeMeetingId"></div>
+        </div>
+        <div class="amb-actions">
+          <button class="btn btn-primary btn-sm" id="activeMeetingRejoinBtn" onclick="">Rejoin Meeting</button>
+          <button class="btn btn-ghost btn-sm" onclick="copyActiveMeetingId()">Copy ID</button>
+        </div>
       </div>
 
       <div class="quick-actions">
@@ -211,6 +253,7 @@
 <script src="js/auth.js"></script>
 <script>
 let currentUser = null;
+let _activeMeetingId = null;
 
 onAuthReady(async user => {
   hideAuthSpinner();
@@ -218,8 +261,39 @@ onAuthReady(async user => {
   currentUser = user;
   populateUserUI(user);
   loadMeetings(user.uid);
+  listenForActiveMeeting(user.uid);
   checkDevices();
 });
+
+// ── Live-listen for host's active meeting ──────────────────
+function listenForActiveMeeting(uid) {
+  db.ref("meetings").orderByChild("hostId").equalTo(uid).on("value", snap => {
+    let found = null;
+    snap.forEach(child => {
+      const d = child.val();
+      if (d.status !== "ended" && d.status !== "closed") {
+        found = { id: child.key, ...d };
+      }
+    });
+    const banner = document.getElementById("activeMeetingBanner");
+    if (!banner) return;
+    if (found) {
+      _activeMeetingId = found.id;
+      document.getElementById("activeMeetingName").textContent = found.name || "Untitled Meeting";
+      document.getElementById("activeMeetingId").textContent = "ID: " + found.id;
+      const rejoinBtn = document.getElementById("activeMeetingRejoinBtn");
+      if (rejoinBtn) rejoinBtn.onclick = () => { window.location.href = "lobby.html?id=" + found.id + "&host=1"; };
+      banner.classList.add("visible");
+    } else {
+      _activeMeetingId = null;
+      banner.classList.remove("visible");
+    }
+  });
+}
+
+function copyActiveMeetingId() {
+  if (_activeMeetingId) navigator.clipboard.writeText(_activeMeetingId).then(() => showToast("Meeting ID copied!"));
+}
 
 function populateUserUI(user) {
   const name  = user.displayName || "User";
@@ -314,7 +388,7 @@ async function confirmCreateMeeting(e) {
     await db.ref("meetings/" + id + "/participants/" + user.uid).set(true);
     hideAuthSpinner();
     closeModal("createModal");
-    window.location.href = "meeting.html?id=" + id;
+    window.location.href = "lobby.html?id=" + id + "&host=1";
   } catch (err) {
     hideAuthSpinner();
     alert("Failed to create meeting: " + err.message);
