@@ -138,6 +138,21 @@
     .gate-sens-row { display:flex; justify-content:space-between; font-size:.65rem; color:var(--text-muted); }
     .gate-level-val { text-align:center; font-size:.72rem; color:var(--accent); font-weight:700; margin-bottom:6px; }
   </style>
+  <style>
+    /* network indicator */
+    .net-ind{position:absolute;top:8px;right:8px;display:flex;align-items:center;justify-content:center;padding:3px 5px;border-radius:5px;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);z-index:3;line-height:1;}
+    .net-good{color:#22c55e;}.net-fair{color:#f59e0b;}.net-poor{color:#ef4444;}.net-reconnecting{color:#a78bfa;}
+    .reconnect-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(10,12,20,.72);backdrop-filter:blur(6px);color:#a78bfa;font-size:.78rem;font-weight:600;gap:10px;border-radius:inherit;z-index:4;}
+    .reconnect-spinner{width:26px;height:26px;border:2px solid rgba(167,139,250,.2);border-top-color:#a78bfa;border-radius:50%;animation:spin .8s linear infinite;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    .net-spin{animation:spin .9s linear infinite;}
+    .own-net-indicator{display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border-radius:5px;font-size:.72rem;font-weight:600;background:rgba(0,0,0,.3);cursor:default;transition:color .3s;}
+    .own-net-indicator.net-good{color:#22c55e;}.own-net-indicator.net-fair{color:#f59e0b;}.own-net-indicator.net-poor{color:#ef4444;}.own-net-indicator.net-reconnecting{color:#a78bfa;}
+    #pauseRecordWrap{display:none;}
+    #pauseRecordBtn.paused{color:#f59e0b;} #pauseRecordBtn.paused:hover{background:rgba(245,158,11,.12);}
+    .p-net-badge{flex-shrink:0;display:flex;align-items:center;padding:2px 4px;border-radius:4px;background:rgba(0,0,0,.25);}
+    .p-net-badge.net-fair{color:#f59e0b;}.p-net-badge.net-poor{color:#ef4444;}.p-net-badge.net-reconnecting{color:#a78bfa;}
+  </style>
 </head>
 <body>
 
@@ -163,6 +178,7 @@
         <svg width="13" height="13" style="opacity:.6"><use href="#ic-clock"/></svg>
         <span>00:00</span>
       </span>
+      <span id="ownNetworkIndicator" class="own-net-indicator net-good" title="Your network quality"></span>
     </div>
     <div class="meeting-topbar-right">
       <span id="participantCount" class="badge badge-accent">1</span>
@@ -355,7 +371,15 @@
       </button>
       <span class="control-btn-label" id="recordLabel">Record</span>
     </div>
-    <div class="controls-divider"></div>
+        <div class="ctrl-item" id="pauseRecordWrap">
+      <button class="control-btn" id="pauseRecordBtn" onclick="togglePauseRecording()" title="Pause Recording">
+        <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
+          <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+        </svg>
+      </button>
+      <span class="control-btn-label" id="pauseRecordLabel">Pause</span>
+    </div>
+<div class="controls-divider"></div>
     <div class="ctrl-item gate-sens-wrap" id="gateSensWrap">
       <div class="gate-sens-panel" id="gateSensPanel">
         <label>Noise Filter Level</label>
