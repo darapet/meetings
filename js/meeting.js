@@ -95,44 +95,84 @@ class MeetingRecorder {
     const W = 1280, H = 720, ctx = this.ctx;
     ctx.fillStyle = "#0d0f14";
     ctx.fillRect(0, 0, W, H);
-    const tiles = [...document.querySelectorAll("#participantGrid .participant-tile")];
-    const count = tiles.length || 1;
-    const cols  = count === 1 ? 1 : count <= 2 ? 2 : count <= 4 ? 2 : 3;
-    const rows  = Math.ceil(count / cols);
-    const tw = W / cols, th = H / rows;
-    tiles.forEach((tile, i) => {
-      const col = i % cols, row = Math.floor(i / cols);
-      const x = col * tw, y = row * th;
-      ctx.fillStyle = "#1a1e2a";
-      ctx.fillRect(x, y, tw, th);
-      const vid = tile.querySelector("video");
-      if (vid && vid.readyState >= 2 && vid.videoWidth > 0) {
-        const scale = Math.max(tw / vid.videoWidth, th / vid.videoHeight);
-        const dw = vid.videoWidth * scale, dh = vid.videoHeight * scale;
-        ctx.save(); ctx.beginPath(); ctx.rect(x, y, tw, th); ctx.clip();
-        ctx.drawImage(vid, x + (tw - dw) / 2, y + (th - dh) / 2, dw, dh);
-        ctx.restore();
+
+    // Use screen share as main video if it is active
+    const screenVid  = document.getElementById("screenPreview");
+    const screenWrap = document.getElementById("screenPreviewWrap");
+    const screenActive = screenVid && screenVid.srcObject &&
+                         screenVid.videoWidth > 0 &&
+                         screenWrap?.style.display !== "none";
+
+    if (screenActive) {
+      const screenH = Math.floor(H * 0.78);
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, W, screenH);
+      const sw = screenVid.videoWidth, sh = screenVid.videoHeight;
+      if (sw > 0 && sh > 0) {
+        const scale = Math.min(W / sw, screenH / sh);
+        const dw = sw * scale, dh = sh * scale;
+        ctx.drawImage(screenVid, (W - dw) / 2, (screenH - dh) / 2, dw, dh);
       }
-      const nameEl = tile.querySelector(".tile-name");
-      if (nameEl) {
-        const name = nameEl.textContent.trim();
-        ctx.font = "bold 14px Inter, sans-serif";
-        const tw2 = ctx.measureText(name).width + 24;
-        ctx.fillStyle = "rgba(0,0,0,0.62)";
-        const lx = x + 10, ly = y + th - 36, lh = 26, r = 8;
-        ctx.beginPath();
-        ctx.moveTo(lx + r, ly); ctx.lineTo(lx + tw2 - r, ly);
-        ctx.quadraticCurveTo(lx + tw2, ly, lx + tw2, ly + r);
-        ctx.lineTo(lx + tw2, ly + lh - r);
-        ctx.quadraticCurveTo(lx + tw2, ly + lh, lx + tw2 - r, ly + lh);
-        ctx.lineTo(lx + r, ly + lh);
-        ctx.quadraticCurveTo(lx, ly + lh, lx, ly + lh - r);
-        ctx.lineTo(lx, ly + r);
-        ctx.quadraticCurveTo(lx, ly, lx + r, ly);
-        ctx.closePath(); ctx.fill();
-        ctx.fillStyle = "#fff"; ctx.fillText(name, lx + 12, ly + lh - 7);
-      }
-    });
+      // Participant thumbnails in bottom strip
+      const thumbH = H - screenH - 4;
+      const tiles  = [...document.querySelectorAll("#participantGrid .participant-tile")];
+      const thumbW = tiles.length > 0 ? Math.min(Math.floor(W / tiles.length), 180) : 180;
+      tiles.forEach((tile, i) => {
+        const tx = i * thumbW, ty = screenH + 4;
+        ctx.fillStyle = "#1a1e2a";
+        ctx.fillRect(tx, ty, thumbW - 2, thumbH);
+        const vid2 = tile.querySelector("video");
+        if (vid2 && vid2.readyState >= 2 && vid2.videoWidth > 0) {
+          ctx.save(); ctx.beginPath(); ctx.rect(tx, ty, thumbW - 2, thumbH); ctx.clip();
+          const s2 = Math.max((thumbW - 2) / vid2.videoWidth, thumbH / vid2.videoHeight);
+          ctx.drawImage(vid2, tx + ((thumbW - 2) - vid2.videoWidth * s2) / 2,
+            ty + (thumbH - vid2.videoHeight * s2) / 2,
+            vid2.videoWidth * s2, vid2.videoHeight * s2);
+          ctx.restore();
+        }
+      });
+    } else {
+      // Normal participant grid
+      const tiles = [...document.querySelectorAll("#participantGrid .participant-tile")];
+      const count = tiles.length || 1;
+      const cols  = count === 1 ? 1 : count <= 2 ? 2 : count <= 4 ? 2 : 3;
+      const rows  = Math.ceil(count / cols);
+      const tw = W / cols, th = H / rows;
+      tiles.forEach((tile, i) => {
+        const col = i % cols, row = Math.floor(i / cols);
+        const x = col * tw, y = row * th;
+        ctx.fillStyle = "#1a1e2a";
+        ctx.fillRect(x, y, tw, th);
+        const vid = tile.querySelector("video");
+        if (vid && vid.readyState >= 2 && vid.videoWidth > 0) {
+          const scale = Math.max(tw / vid.videoWidth, th / vid.videoHeight);
+          const dw = vid.videoWidth * scale, dh = vid.videoHeight * scale;
+          ctx.save(); ctx.beginPath(); ctx.rect(x, y, tw, th); ctx.clip();
+          ctx.drawImage(vid, x + (tw - dw) / 2, y + (th - dh) / 2, dw, dh);
+          ctx.restore();
+        }
+        const nameEl = tile.querySelector(".tile-name");
+        if (nameEl) {
+          const name = nameEl.textContent.trim();
+          ctx.font = "bold 14px Inter, sans-serif";
+          const tw2 = ctx.measureText(name).width + 24;
+          ctx.fillStyle = "rgba(0,0,0,0.62)";
+          const lx = x + 10, ly = y + th - 36, lh = 26, r = 8;
+          ctx.beginPath();
+          ctx.moveTo(lx + r, ly); ctx.lineTo(lx + tw2 - r, ly);
+          ctx.quadraticCurveTo(lx + tw2, ly, lx + tw2, ly + r);
+          ctx.lineTo(lx + tw2, ly + lh - r);
+          ctx.quadraticCurveTo(lx + tw2, ly + lh, lx + tw2 - r, ly + lh);
+          ctx.lineTo(lx + r, ly + lh);
+          ctx.quadraticCurveTo(lx, ly + lh, lx, ly + lh - r);
+          ctx.lineTo(lx, ly + r);
+          ctx.quadraticCurveTo(lx, ly, lx + r, ly);
+          ctx.closePath(); ctx.fill();
+          ctx.fillStyle = "#fff"; ctx.fillText(name, lx + 12, ly + lh - 7);
+        }
+      });
+    }
+
     // REC / PAUSED indicator
     if (this.isPaused) {
       ctx.fillStyle = "#f59e0b";
@@ -184,7 +224,9 @@ async function initMeeting() {
     try { setupAI();                  } catch (e) { console.error("AI:", e); }
     try { setupChat();                } catch (e) { console.error("Chat:", e); }
     try { setupPresenceDisplay();     } catch (e) { console.error("Presence:", e); }
-    try { setupAIBroadcastListener(); } catch (e) { console.error("AI Broadcast:", e); }
+    try { setupAIBroadcastListener();    } catch (e) { console.error("AI Broadcast:", e); }
+    try { setupHostCommandListener();    } catch (e) { console.error("HostCmd:", e); }
+    try { setupPetAIBroadcast();         } catch (e) { console.error("PetAI Broadcast:", e); }
     updateHostControls();
     startMeetingTimer();
     if (isHost) try { listenForJoinRequests(); } catch (e) { console.error("WaitingRoom:", e); }
@@ -365,20 +407,50 @@ function addParticipantTile(uid, name, photo, isLocal, stream) {
   const vidEl = document.getElementById("vid-" + uid);
   if (stream && vidEl) {
     vidEl.srcObject = stream;
-    if (!isLocal) vidEl.play().catch(() => _showTapToUnmute(uid));
+    if (!isLocal) _tryPlayVideo(uid, vidEl);
   }
   _setTileVideoVisible(uid, isLocal ? videoEnabled : true);
   updateParticipantCount();
 }
 
-function _showTapToUnmute(uid) {
-  const tile = document.getElementById("tile-" + uid);
-  if (!tile || tile.querySelector(".tap-unmute")) return;
-  const overlay = document.createElement("div");
-  overlay.className = "tap-unmute"; overlay.textContent = "Tap to hear";
-  overlay.onclick = () => { document.getElementById("vid-" + uid)?.play().catch(() => {}); overlay.remove(); };
-  tile.appendChild(overlay);
+// ── Global audio unlock (replaces per-tile tap-to-hear overlays) ──────────
+let _audioUnlocked = false;
+const _pendingVideoPlays = new Map();
+
+function _tryPlayVideo(uid, vid) {
+  if (!vid) return;
+  vid.play().then(() => {
+    _pendingVideoPlays.delete(uid);
+  }).catch(err => {
+    if (err.name === "NotAllowedError" || err.name === "NotSupportedError") {
+      _pendingVideoPlays.set(uid, vid);
+      _showAudioUnlockBar();
+    }
+  });
 }
+
+function _showAudioUnlockBar() {
+  if (document.getElementById("audioUnlockBar")) return;
+  const bar = document.createElement("div");
+  bar.id = "audioUnlockBar";
+  bar.className = "audio-unlock-bar";
+  bar.innerHTML = `<button class="audio-unlock-btn" onclick="_doUnlockAudio()">🔊 Tap here to enable audio from all participants</button>`;
+  document.body.appendChild(bar);
+}
+
+function _doUnlockAudio() {
+  _audioUnlocked = true;
+  document.getElementById("audioUnlockBar")?.remove();
+  _pendingVideoPlays.forEach((vid) => vid.play().catch(() => {}));
+  _pendingVideoPlays.clear();
+}
+
+// Auto-unlock on any user gesture
+["click","touchstart","keydown"].forEach(evt =>
+  document.addEventListener(evt, () => {
+    if (!_audioUnlocked && _pendingVideoPlays.size > 0) _doUnlockAudio();
+  }, { passive: true })
+);
 
 function removeParticipantTile(uid)  { document.getElementById("tile-" + uid)?.remove(); updateParticipantCount(); }
 
@@ -457,28 +529,52 @@ function updateParticipantSidebar() {
 
 function _appendParticipantItem(list, uid, name, photo, isLocal, data = {}) {
   const item = document.createElement("div");
+  item.id        = "pitem-" + uid;
   item.className = "participant-item";
   const initials = escapeHtml(getInitials(name || "?"));
   const avatar   = photo
     ? `<img src="${escapeHtml(photo)}" class="p-avatar-img" alt="">`
     : `<div class="p-avatar-initials">${initials}</div>`;
-  const netQ = data.networkQuality || "good";
+  const netQ     = data.networkQuality || "good";
   const netBadge = netQ !== "good"
     ? `<span class="p-net-badge net-${netQ}" title="Network: ${netQ}">${_signalBarsHtml(netQ)}</span>`
     : "";
+  const isMuted  = data.audio === false;
+  const isHostUser = uid === meetingData?.hostId;
+  const hostBadge = isHostUser
+    ? `<span style="font-size:.6rem;background:var(--accent);color:#fff;padding:1px 5px;border-radius:4px;font-weight:700;vertical-align:middle;">Host</span> `
+    : "";
+  const micStatus = isMuted
+    ? `<span style="color:#ef4444;font-size:.7rem;">🔇 Muted</span>`
+    : `<span style="color:#22c55e;font-size:.7rem;">🎤 Live</span>`;
+
+  let hostButtons = "";
+  if (isHost && !isLocal) {
+    if (isMuted) {
+      hostButtons = `<button class="p-unmute-btn" onclick="hostMuteParticipant('${uid}')" title="Request unmute">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+        </svg>
+      </button>`;
+    } else {
+      hostButtons = `<button class="p-mute-btn" onclick="hostMuteParticipant('${uid}')" title="Mute">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <line x1="1" y1="1" x2="23" y2="23"/>
+          <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/>
+          <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/>
+        </svg>
+      </button>`;
+    }
+  }
   item.innerHTML = `
     <div class="p-avatar">${avatar}</div>
     <div class="p-info">
-      <div class="p-name">${escapeHtml(name || "Participant")}${isLocal ? " <span class='p-you'>(You)</span>" : ""}</div>
-      <div class="p-sub">${isLocal ? "Host" : (data.audio === false ? "Muted" : "")}</div>
+      <div class="p-name">${hostBadge}${escapeHtml(name || "Participant")}${isLocal ? " <span class='p-you'>(You)</span>" : ""}</div>
+      <div class="p-sub">${micStatus}</div>
     </div>
     ${netBadge}
-    ${isLocal ? "" : `<button class="btn-icon p-mute-btn" onclick="hostMuteParticipant('${uid}')" title="Mute">
-      <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-      </svg>
-    </button>`}`;
+    ${hostButtons}`;
   list.appendChild(item);
 }
 
@@ -774,8 +870,13 @@ function declineGuest(uid) {
 function _hideQueueIfEmpty() { const c = document.getElementById("admissionQueue"); if (c?.children.length === 0) c.style.display = "none"; }
 
 function hostMuteParticipant(uid) {
-  db.ref("presence/" + meetingId + "/" + uid + "/forceMuted").set(true).catch(() => {});
-  showToast("Muted participant");
+  if (!isHost) return;
+  const isMuted = participants[uid]?.audio === false;
+  const action  = isMuted ? "unmute" : "mute";
+  db.ref("hostCommands/" + meetingId + "/" + uid).set({
+    action, ts: firebase.database.ServerValue.TIMESTAMP
+  }).catch(() => {});
+  showToast(isMuted ? "Requested unmute" : "Muting participant");
 }
 
 // ── Leave / End ───────────────────────────────────────────
@@ -1013,24 +1114,59 @@ function _playNotificationBeep() {
   } catch (_) {}
 }
 
-// ── Same-room echo fix: mute/unmute all remote audio ──────
-let _sameRoomMode = false;
-function toggleSameRoomMode() {
-  _sameRoomMode = !_sameRoomMode;
-  // Target all remote participant video elements in the grid (exclude local user's video)
-  document.querySelectorAll("#participantGrid .participant-tile video").forEach(v => {
-    const tileId = v.closest(".participant-tile")?.id || "";
-    const uid    = tileId.replace("tile-", "");
-    if (uid !== currentUser?.uid) v.muted = _sameRoomMode;
-  });
-  const btn = document.getElementById("sameRoomBtn");
-  if (btn) {
-    btn.classList.toggle("active", _sameRoomMode);
-    btn.title = _sameRoomMode ? "Same-Room Mode ON (remote audio muted)" : "Same-Room Mode (mute remote audio)";
+// ── Same-room echo fix: participant-selection dialog ──────
+const _locallyMutedParticipants = new Set();
+
+// Backward-compat alias kept so any old references still work
+function toggleSameRoomMode() { openSameRoomDialog(); }
+
+function openSameRoomDialog() {
+  const overlay = document.getElementById("sameRoomOverlay");
+  if (!overlay) return;
+  const list = document.getElementById("sameRoomList");
+  if (!list) return;
+  list.innerHTML = "";
+  const uids = Object.keys(participants).filter(uid => uid !== currentUser?.uid);
+  if (uids.length === 0) {
+    list.innerHTML = `<p style="color:var(--text-muted);font-size:.85rem;padding:8px 0;">No other participants yet.</p>`;
+  } else {
+    uids.forEach(uid => {
+      const data     = participants[uid] || {};
+      const isMuted  = _locallyMutedParticipants.has(uid);
+      const initials = escapeHtml(getInitials(data.displayName || "?"));
+      const item = document.createElement("div");
+      item.className = "same-room-item";
+      item.innerHTML = `
+        <div class="same-room-avatar">${initials}</div>
+        <div class="same-room-name">${escapeHtml(data.displayName || "Participant")}</div>
+        <button class="btn btn-sm ${isMuted ? "btn-danger" : "btn-ghost"}" id="srmBtn-${uid}"
+          onclick="toggleSameRoomParticipant('${uid}')">
+          ${isMuted ? "🔇 Muted" : "🔊 Mute"}
+        </button>`;
+      list.appendChild(item);
+    });
   }
-  showToast(_sameRoomMode
-    ? "Same-room mode ON — remote audio muted to prevent echo"
-    : "Same-room mode OFF — remote audio restored");
+  overlay.classList.add("open");
+}
+
+function closeSameRoomDialog() {
+  document.getElementById("sameRoomOverlay")?.classList.remove("open");
+}
+
+function toggleSameRoomParticipant(uid) {
+  const vid = document.getElementById("vid-" + uid);
+  const btn = document.getElementById("srmBtn-" + uid);
+  if (_locallyMutedParticipants.has(uid)) {
+    _locallyMutedParticipants.delete(uid);
+    if (vid) vid.muted = false;
+    if (btn) { btn.className = "btn btn-sm btn-ghost"; btn.textContent = "🔊 Mute"; }
+    showToast("Audio restored");
+  } else {
+    _locallyMutedParticipants.add(uid);
+    if (vid) vid.muted = true;
+    if (btn) { btn.className = "btn btn-sm btn-danger"; btn.textContent = "🔇 Muted"; }
+    showToast("Locally muted — prevents echo");
+  }
 }
 
 // ── AI Terminal ────────────────────────────────────────────
@@ -1135,4 +1271,93 @@ async function _persistTranscript(text) {
       savedAt: firebase.database.ServerValue.TIMESTAMP
     });
   } catch (_) {}
+}
+
+// ── Host command listener (mute / unmute from host) ───────
+function setupHostCommandListener() {
+  db.ref("hostCommands/" + meetingId + "/" + currentUser.uid).on("value", snap => {
+    const cmd = snap.val();
+    if (!cmd || !cmd.action) return;
+    if (cmd.action === "mute" && audioEnabled) {
+      audioEnabled = false;
+      webrtc?.setAudioEnabled(false);
+      _syncMicIcon(false);
+      showToast("🔇 Host muted your microphone");
+    } else if (cmd.action === "unmute" && !audioEnabled) {
+      audioEnabled = true;
+      webrtc?.setAudioEnabled(true);
+      _syncMicIcon(true);
+      showToast("🎤 Host unmuted your microphone");
+    }
+    snap.ref.remove().catch(() => {});
+  });
+}
+
+// ── Pet AI broadcast — sync AI activity to all participants ─
+function setupPetAIBroadcast() {
+  let _prevMicState = null;
+
+  db.ref("petAIBroadcast/" + meetingId).on("value", snap => {
+    const data = snap.val();
+
+    if (!data || !data.active) {
+      // AI stopped — remove banner and restore mic for non-summoner
+      document.getElementById("petAIGlobalBanner")?.remove();
+      document.querySelectorAll("#participantGrid .participant-tile").forEach(t => t.classList.remove("ai-speaking"));
+      if (_prevMicState !== null) {
+        audioEnabled = _prevMicState;
+        webrtc?.setAudioEnabled(audioEnabled);
+        _syncMicIcon(audioEnabled);
+        _prevMicState = null;
+      }
+      return;
+    }
+
+    // Show banner for ALL participants
+    _showPetAIGlobalBanner();
+    document.querySelectorAll("#participantGrid .participant-tile").forEach(t => t.classList.add("ai-speaking"));
+
+    // Non-summoner: mute mic so there's no background noise
+    if (data.uid !== currentUser?.uid) {
+      if (_prevMicState === null) _prevMicState = audioEnabled;
+      if (audioEnabled) {
+        audioEnabled = false;
+        webrtc?.setAudioEnabled(false);
+        _syncMicIcon(false);
+        showToast("✦ Pet AI is speaking — mic paused");
+      }
+    }
+  });
+
+  // Play speech text on non-summoner devices so everyone can hear Pet AI
+  db.ref("petAIBroadcast/" + meetingId + "/speech").on("value", snap => {
+    const speechData = snap.val();
+    if (!speechData || !speechData.text) return;
+    db.ref("petAIBroadcast/" + meetingId).once("value", s => {
+      const broadcast = s.val();
+      if (!broadcast || !broadcast.active) return;
+      if (broadcast.uid === currentUser?.uid) return; // summoner already hears via PetAI locally
+      if (!("speechSynthesis" in window)) return;
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(speechData.text);
+      utter.rate = 1.05; utter.pitch = 1.0; utter.volume = 1.0;
+      const voices = window.speechSynthesis.getVoices();
+      const voice  = voices.find(v => v.lang.startsWith("en") && v.localService)
+                  || voices.find(v => v.lang.startsWith("en"));
+      if (voice) utter.voice = voice;
+      window.speechSynthesis.speak(utter);
+    });
+  });
+}
+
+function _showPetAIGlobalBanner() {
+  if (document.getElementById("petAIGlobalBanner")) return;
+  const banner = document.createElement("div");
+  banner.id        = "petAIGlobalBanner";
+  banner.className = "petai-global-banner";
+  banner.innerHTML = `
+    <div class="petai-global-orb-mini"></div>
+    <span>✦ Pet AI is speaking — mics paused</span>
+    <div class="petai-global-orb-mini"></div>`;
+  document.body.appendChild(banner);
 }
