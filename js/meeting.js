@@ -597,7 +597,7 @@ function setupTranscription() {
 
 let _interimEl = null;
 function _onTranscriptChunk({ type, text, fullText }) {
-  const liveEl = document.getElementById("liveTranscript");
+  const liveEl = document.getElementById("transcriptContent");
   if (!liveEl) return;
   if (type === "final") {
     _interimEl?.remove(); _interimEl = null;
@@ -633,6 +633,11 @@ function setupAI() {
     const el = document.getElementById("aiResponse");
     if (el) el.innerHTML = _markdownToHtml(escapeHtml(resp));
   });
+  // Wire up Book Mode toggle
+  const bookToggle = document.getElementById("bookModeToggle");
+  if (bookToggle) {
+    bookToggle.addEventListener("change", () => { if (aiManager) aiManager.bookMode = bookToggle.checked; });
+  }
 }
 
 // ── Chat ──────────────────────────────────────────────────
