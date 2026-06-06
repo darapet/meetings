@@ -373,3 +373,61 @@
   .control-btn.control-leave { width:52px; }
   #participantGrid  { grid-template-columns: repeat(auto-fill, minmax(min(120px, 45vw), 1fr)); }
 }
+
+
+/* === AUTO-RECONNECT + NETWORK QUALITY === */
+/* ── Network quality indicator on tiles ── */
+.net-ind {
+  position:absolute;top:8px;right:8px;
+  display:flex;align-items:center;justify-content:center;
+  padding:3px 5px;border-radius:5px;
+  background:rgba(0,0,0,.55);backdrop-filter:blur(4px);
+  z-index:3;line-height:1;
+}
+.net-good  { color:#22c55e; }
+.net-fair  { color:#f59e0b; }
+.net-poor  { color:#ef4444; }
+.net-reconnecting { color:#a78bfa; }
+
+/* ── Reconnecting overlay ── */
+.reconnect-overlay {
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(10,12,20,.7);backdrop-filter:blur(6px);
+  color:#a78bfa;font-size:.78rem;font-weight:600;gap:10px;
+  border-radius:inherit;z-index:4;
+}
+.reconnect-spinner {
+  width:26px;height:26px;
+  border:2px solid rgba(167,139,250,.2);
+  border-top-color:#a78bfa;
+  border-radius:50%;
+  animation:spin .8s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+.net-spin { animation:spin .9s linear infinite; }
+
+/* ── Own network indicator in top bar ── */
+.own-net-indicator {
+  display:inline-flex;align-items:center;gap:4px;
+  padding:3px 7px;border-radius:5px;font-size:.72rem;font-weight:600;
+  background:rgba(0,0,0,.3);cursor:default;transition:color .3s;
+}
+.own-net-indicator.net-good         { color:#22c55e; }
+.own-net-indicator.net-fair         { color:#f59e0b; }
+.own-net-indicator.net-poor         { color:#ef4444; }
+.own-net-indicator.net-reconnecting { color:#a78bfa; }
+
+/* ── Pause recording button ── */
+#pauseRecordWrap { display:none; }
+#pauseRecordBtn.paused { color:#f59e0b; }
+#pauseRecordBtn.paused:hover { background:rgba(245,158,11,.12); }
+
+/* ── People sidebar network badge ── */
+.p-net-badge {
+  flex-shrink:0;display:flex;align-items:center;
+  padding:2px 4px;border-radius:4px;background:rgba(0,0,0,.25);
+}
+.p-net-badge.net-fair  { color:#f59e0b; }
+.p-net-badge.net-poor  { color:#ef4444; }
+.p-net-badge.net-reconnecting { color:#a78bfa; }
