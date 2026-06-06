@@ -542,7 +542,7 @@ function setupAI() {
 // ── Chat ──────────────────────────────────────────────────
 function setupChat() {
   const chatRef  = db.ref("chat/" + meetingId);
-  const chatList = document.getElementById("chatMessages");
+  const chatList = document.getElementById("chatLog");
   if (!chatList) return;
   chatRef.limitToLast(50).on("child_added", snap => {
     const msg = snap.val();
@@ -1017,12 +1017,11 @@ function _playNotificationBeep() {
 let _sameRoomMode = false;
 function toggleSameRoomMode() {
   _sameRoomMode = !_sameRoomMode;
-  document.querySelectorAll(".remote-video").forEach(v => {
-    if (v.tagName === "VIDEO") v.muted = _sameRoomMode;
-  });
-  // Also get any video elements inside tile wrappers
-  document.querySelectorAll("#videoGrid video:not(#localVideo)").forEach(v => {
-    v.muted = _sameRoomMode;
+  // Target all remote participant video elements in the grid (exclude local user's video)
+  document.querySelectorAll("#participantGrid .participant-tile video").forEach(v => {
+    const tileId = v.closest(".participant-tile")?.id || "";
+    const uid    = tileId.replace("tile-", "");
+    if (uid !== currentUser?.uid) v.muted = _sameRoomMode;
   });
   const btn = document.getElementById("sameRoomBtn");
   if (btn) {
@@ -1032,4 +1031,108 @@ function toggleSameRoomMode() {
   showToast(_sameRoomMode
     ? "Same-room mode ON — remote audio muted to prevent echo"
     : "Same-room mode OFF — remote audio restored");
+}
+
+// ── AI Terminal ────────────────────────────────────────────
+function openAITerminal() {
+  const overlay = document.getElementById("aiTerminalOverlay");
+  if (overlay) overlay.classList.add("visible");
+  setTimeout(() => document.getElementById("aiInput")?.focus(), 100);
+}
+
+function closeAITerminal() {
+  const overlay = document.getElementById("aiTerminalOverlay");
+  if (overlay) overlay.classList.remove("visible");
+}
+
+function stopAI() {
+  aiManager?.stopSpeaking();
+  const indicator = document.getElementById("aiTypingIndicator");
+  if (indicator) indicator.style.display = "none";
+}
+
+function continueAI() {
+  if (!aiManager) return;
+  sendAIMessage("Continue");
+}
+
+async function sendAIMessage(overrideText) {
+  const input    = document.getElementById("aiInput");
+  const chatLog  = document.getElementById("aiChatLog");
+  const indicator = document.getElementById("aiTypingIndicator");
+  const text = overrideText || (input?.value || "").trim();
+  if (!text) return;
+  if (input && !overrideText) input.value = "";
+
+  // Append user bubble
+  if (chatLog) {
+    const userBubble = document.createElement("div");
+    userBubble.className = "ai-bubble ai-bubble-user";
+    userBubble.innerHTML = `<div class="ai-bubble-text">${escapeHtml(text)}</div>`;
+    chatLog.appendChild(userBubble);
+    chatLog.scrollTop = chatLog.scrollHeight;
+  }
+
+  if (indicator) indicator.style.display = "block";
+  _broadcastAIActivity(true);
+
+  try {
+    if (!aiManager) {
+      setupAI();
+      if (!aiManager) throw new Error("AI not ready");
+    }
+    const transcript = transcription?.getFullText() || "";
+    const reply = await aiManager.chat(text, transcript);
+    if (chatLog) {
+      const aiBubble = document.createElement("div");
+      aiBubble.className = "ai-bubble ai-bubble-ai";
+      aiBubble.innerHTML = `
+        <div class="ai-bubble-label">🤖 MeetAI (Mistral)</div>
+        <div class="ai-bubble-text">${_markdownToHtml(escapeHtml(reply))}</div>`;
+      chatLog.appendChild(aiBubble);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+    aiManager.speak(reply);
+  } catch (err) {
+    if (chatLog) {
+      const errBubble = document.createElement("div");
+      errBubble.className = "ai-bubble ai-bubble-ai";
+      errBubble.innerHTML = `<div class="ai-bubble-text">❌ ${escapeHtml(err.message)}</div>`;
+      chatLog.appendChild(errBubble);
+    }
+  } finally {
+    if (indicator) indicator.style.display = "none";
+    _broadcastAIActivity(false);
+  }
+}
+
+// ── Summarize transcript ───────────────────────────────────
+async function triggerSummarize() {
+  if (!aiManager) setupAI();
+  const btn     = document.getElementById("summarizeBtn");
+  const content = document.getElementById("summaryContent");
+  if (btn) { btn.textContent = "Summarizing…"; btn.disabled = true; }
+  if (content) content.innerHTML = `<span style="color:var(--text-muted)">Generating summary…</span>`;
+  try {
+    const transcript = transcription?.getFullText() || "";
+    const mode = aiManager?.bookMode ? "book" : "standard";
+    const summary = await aiManager.summarize(transcript, mode);
+    if (content) content.innerHTML = _markdownToHtml(escapeHtml(summary));
+    aiManager?.saveSummaryToRTDB?.(summary, mode);
+  } catch (err) {
+    if (content) content.innerHTML = `<span style="color:var(--danger)">❌ ${escapeHtml(err.message)}</span>`;
+  } finally {
+    if (btn) { btn.textContent = "Summarize Now"; btn.disabled = false; }
+  }
+}
+
+// ── Persist transcript to RTDB on meeting end ──────────────
+async function _persistTranscript(text) {
+  if (!text || !meetingId) return;
+  try {
+    await db.ref("meetings/" + meetingId + "/transcript").set({
+      text,
+      savedAt: firebase.database.ServerValue.TIMESTAMP
+    });
+  } catch (_) {}
 }
