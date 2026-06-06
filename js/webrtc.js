@@ -284,8 +284,15 @@ class WebRTCManager {
               if (!remoteStream.getTracks().find(existing => existing.id === t.id)) {
                 remoteStream.addTrack(t);
               }
+              // Re-attach onunmute — replaceTrack renegotiation mutes the track
+              // briefly; when it unmutes the video must re-render
+              t.onunmute = () => this.onRemoteStream(peerId, remoteStream);
             });
             this.onRemoteStream(peerId, remoteStream);
+            // Delayed retry: track data may not arrive until after negotiation settles
+            setTimeout(() => {
+              if (this.remoteStreams[peerId]) this.onRemoteStream(peerId, this.remoteStreams[peerId]);
+            }, 400);
           }
         } catch(e) { console.error("Re-offer:", e); }
         return;
