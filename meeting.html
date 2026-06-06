@@ -566,6 +566,21 @@ function downloadPrivateNotes() {
 
 // ── Screen share ──────────────────────────────────────────
 let _screenSharing = false;
+
+function _restoreCameraAfterScreenShare() {
+  const screenVid = document.getElementById("screenPreview");
+  if (screenVid) { screenVid.srcObject = null; }
+  // Re-sync the local participant tile so camera shows again
+  if (typeof currentUser !== "undefined" && currentUser && webrtc?.localStream) {
+    const localVidEl = document.querySelector("#tile-" + currentUser.uid + " video");
+    if (localVidEl) {
+      localVidEl.srcObject = null;
+      localVidEl.srcObject = webrtc.localStream;
+      localVidEl.play().catch(() => {});
+    }
+  }
+}
+
 async function handleScreenShare() {
   if (!webrtc) return;
   if (!_screenSharing) {
@@ -575,6 +590,7 @@ async function handleScreenShare() {
         _updateScreenBtn(false);
         const wrap = document.getElementById("screenPreviewWrap");
         if (wrap) wrap.style.display = "none";
+        _restoreCameraAfterScreenShare();
       });
       _screenSharing = true;
       _updateScreenBtn(true);
@@ -590,6 +606,7 @@ async function handleScreenShare() {
     _updateScreenBtn(false);
     const wrap = document.getElementById("screenPreviewWrap");
     if (wrap) wrap.style.display = "none";
+    _restoreCameraAfterScreenShare();
   }
 }
 
