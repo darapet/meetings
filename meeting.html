@@ -123,6 +123,21 @@
       <circle cx="16" cy="17" r="2"/>
     </symbol>
   </svg>
+  <style>
+    .gate-sens-wrap { position:relative; }
+    .gate-sens-panel {
+      display:none; position:absolute; bottom:74px; left:50%;
+      transform:translateX(-50%);
+      background:var(--bg-card); border:1px solid var(--border-accent);
+      border-radius:var(--radius); padding:14px 16px; width:200px;
+      box-shadow:0 8px 32px rgba(0,0,0,.5); z-index:200;
+    }
+    .gate-sens-panel.open { display:block; }
+    .gate-sens-panel label { display:block; font-size:.72rem; font-weight:600; color:var(--text-muted); margin-bottom:8px; }
+    .gate-sens-panel input[type=range] { width:100%; margin-bottom:6px; accent-color:var(--accent); }
+    .gate-sens-row { display:flex; justify-content:space-between; font-size:.65rem; color:var(--text-muted); }
+    .gate-level-val { text-align:center; font-size:.72rem; color:var(--accent); font-weight:700; margin-bottom:6px; }
+  </style>
 </head>
 <body>
 
@@ -341,6 +356,21 @@
       <span class="control-btn-label" id="recordLabel">Record</span>
     </div>
     <div class="controls-divider"></div>
+    <div class="ctrl-item gate-sens-wrap" id="gateSensWrap">
+      <div class="gate-sens-panel" id="gateSensPanel">
+        <label>Noise Filter Level</label>
+        <div class="gate-level-val" id="gateLevelVal">Balanced</div>
+        <input type="range" id="gateThreshSlider" min="-55" max="-20" value="-36" step="1"
+          oninput="onGateSlider(this.value)">
+        <div class="gate-sens-row"><span>Open</span><span>Strict</span></div>
+      </div>
+      <button class="control-btn" id="gateSensBtn" onclick="toggleGateSens()" title="Noise filter level">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+        </svg>
+      </button>
+      <span class="control-btn-label">Filter</span>
+    </div>
     <div class="ctrl-item">
       <button class="control-btn control-leave" onclick="leaveMeeting()" title="Leave">
         <svg width="22" height="22"><use href="#ic-phone-off"/></svg>
@@ -508,6 +538,29 @@ function _syncRecordIcon(recording) {
   if (lbl)  lbl.textContent = recording ? "Stop Rec" : "Record";
   if (btn)  btn.title = recording ? "Stop Recording" : "Start Recording";
   if (btn)  btn.classList.toggle("recording", recording);
+}
+
+
+// ── Audio sensitivity slider ──────────────────────────
+let _gatePanelOpen = false;
+function toggleGateSens() {
+  _gatePanelOpen = !_gatePanelOpen;
+  document.getElementById('gateSensPanel')?.classList.toggle('open', _gatePanelOpen);
+}
+document.addEventListener('click', e => {
+  const w = document.getElementById('gateSensWrap');
+  if (_gatePanelOpen && w && !w.contains(e.target)) {
+    _gatePanelOpen = false;
+    document.getElementById('gateSensPanel')?.classList.remove('open');
+  }
+});
+function onGateSlider(val) {
+  const db = parseInt(val);
+  const lbl = document.getElementById('gateLevelVal');
+  const labels = [[-55,'Open'],[-45,'Sensitive'],[-38,'Balanced'],[-30,'Strict'],[-20,'Very Strict']];
+  const name = labels.reduce((a,b) => db >= b[0] ? b : a)[1];
+  if (lbl) lbl.textContent = name;
+  if (webrtc && webrtc.audioProcessor) webrtc.audioProcessor.setThreshold(db);
 }
 
 // ── Init ─────────────────────────────────────────────────
