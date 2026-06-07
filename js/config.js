@@ -83,6 +83,11 @@ async function callMistral(messages, options = {}) {
   return `❌ AI error: ${lastError}. Please try again.`;
 }
 
+// ── LiveKit ────────────────────────────────────────────
+const LIVEKIT_URL        = "wss://darameeting-3i3nbz22.livekit.cloud";
+const LIVEKIT_API_KEY    = "APIDwtUka6mSEt6";
+const LIVEKIT_API_SECRET = "wYYIlBsfYfyj03IT3femqfPjtrrBryTlG8qth87YmQfF";
+
 // ── WebRTC ICE servers ─────────────────────────────────────
 const ICE_SERVERS = {
   iceServers: [
