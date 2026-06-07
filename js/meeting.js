@@ -512,11 +512,21 @@ function setupWebRTC() {
 function setupTranscription() {
   if (typeof LiveTranscription === "undefined") return;
   transcription = new LiveTranscription(
-    chunk => _onTranscriptChunk(chunk),
-    err   => console.warn("Transcription:", err),
+    chunk  => _onTranscriptChunk(chunk),
+    err    => {
+      console.warn("Transcription:", err);
+      showToast("🎙 Transcription: " + err);
+      _onTranscriptStatus("error");
+    },
     status => _onTranscriptStatus(status)
   );
-  if (transcription.isSupported()) transcription.start();
+  if (transcription.isSupported()) {
+    transcription.start();
+  } else {
+    _onTranscriptStatus("unsupported");
+    const liveEl = document.getElementById("transcriptContent");
+    if (liveEl) liveEl.innerHTML = '<p style="color:var(--warning);font-size:.82rem;">⚠️ Live transcription requires Chrome or Edge. Switch browsers to enable it.</p>';
+  }
 }
 
 let _interimEl = null;
