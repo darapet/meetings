@@ -1,0 +1,292 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Dara Meetings API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: livekit
+    description: LiveKit token operations
+  - name: meetings
+    description: Meeting room operations
+  - name: ai
+    description: AI assistant operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /livekit/token:
+    post:
+      operationId: getLivekitToken
+      tags: [livekit]
+      summary: Generate a LiveKit access token for a room
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenRequest"
+      responses:
+        "200":
+          description: Token generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: Bad request
+
+  /meetings:
+    get:
+      operationId: listMeetings
+      tags: [meetings]
+      summary: List active meetings
+      responses:
+        "200":
+          description: List of meetings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Meeting"
+    post:
+      operationId: createMeeting
+      tags: [meetings]
+      summary: Create a new meeting room
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MeetingInput"
+      responses:
+        "201":
+          description: Meeting created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Meeting"
+
+  /meetings/{roomId}:
+    get:
+      operationId: getMeeting
+      tags: [meetings]
+      summary: Get meeting details
+      parameters:
+        - name: roomId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Meeting details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Meeting"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteMeeting
+      tags: [meetings]
+      summary: End/delete a meeting
+      parameters:
+        - name: roomId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /meetings/stats:
+    get:
+      operationId: getMeetingStats
+      tags: [meetings]
+      summary: Get meeting platform statistics
+      responses:
+        "200":
+          description: Platform stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeetingStats"
+
+  /ai/chat:
+    post:
+      operationId: aiChat
+      tags: [ai]
+      summary: Send message to PET AI assistant (Mistral)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiChatInput"
+      responses:
+        "200":
+          description: AI response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatReply"
+
+  /ai/summarize:
+    post:
+      operationId: aiSummarize
+      tags: [ai]
+      summary: Summarize meeting transcript (book mode supported)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SummaryInput"
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryResult"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+
+    TokenRequest:
+      type: object
+      required: [roomName, participantName]
+      properties:
+        roomName:
+          type: string
+        participantName:
+          type: string
+        isHost:
+          type: boolean
+
+    TokenResponse:
+      type: object
+      required: [token, wsUrl]
+      properties:
+        token:
+          type: string
+        wsUrl:
+          type: string
+
+    Meeting:
+      type: object
+      required: [id, roomName, title, hostName, createdAt, participantCount, isActive]
+      properties:
+        id:
+          type: string
+        roomName:
+          type: string
+        title:
+          type: string
+        hostName:
+          type: string
+        createdAt:
+          type: string
+        participantCount:
+          type: integer
+        isActive:
+          type: boolean
+        maxParticipants:
+          type: integer
+
+    MeetingInput:
+      type: object
+      required: [title, hostName]
+      properties:
+        title:
+          type: string
+        hostName:
+          type: string
+        maxParticipants:
+          type: integer
+
+    MeetingStats:
+      type: object
+      required: [activeMeetings, totalParticipants, maxMeetingsAllowed]
+      properties:
+        activeMeetings:
+          type: integer
+        totalParticipants:
+          type: integer
+        maxMeetingsAllowed:
+          type: integer
+        meetingsList:
+          type: array
+          items:
+            $ref: "#/components/schemas/Meeting"
+
+    AiChatInput:
+      type: object
+      required: [message, roomId]
+      properties:
+        message:
+          type: string
+        roomId:
+          type: string
+        conversationHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+
+    ChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+        content:
+          type: string
+
+    ChatReply:
+      type: object
+      required: [reply]
+      properties:
+        reply:
+          type: string
+
+    SummaryInput:
+      type: object
+      required: [transcript, roomId]
+      properties:
+        transcript:
+          type: string
+        roomId:
+          type: string
+        bookMode:
+          type: boolean
+
+    SummaryResult:
+      type: object
+      required: [summary]
+      properties:
+        summary:
+          type: string
