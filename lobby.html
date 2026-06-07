@@ -320,6 +320,19 @@ async function confirmName() {
   try {
     const snap = await db.ref("meetings/" + meetingId).once("value");
     const data = snap.val() || {};
+
+    // Enforce per-meeting participant cap (default 500)
+    const maxPart = data.maxParticipants || 500;
+    const presSnap = await db.ref("presence/" + meetingId).once("value");
+    const currentCount = presSnap.numChildren();
+    if (currentCount >= maxPart) {
+      showStep2();
+      setStatus("error",
+        "Meeting is full",
+        "This meeting has reached its limit of " + maxPart + " participants. Please contact the host.");
+      return;
+    }
+
     await startPreview();
     await placeJoinRequest(data.name || "Meeting", currentUser);
   } catch (err) {
