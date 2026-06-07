@@ -3,6 +3,8 @@
 // ============================================================
 
 let webrtc         = null;
+let jitsiApi       = null;   // Jitsi IFrame API instance (SFU — supports 1000+ people)
+let _jitsiPresRef  = null;   // Firebase presence ref shared across helpers
 let transcription  = null;
 let aiManager      = null;
 let meetingId      = null;
@@ -163,26 +165,16 @@ async function loadMeetingData() {
 }
 
 // ── Local media ───────────────────────────────────────────
+// With Jitsi handling all video/audio rendering, we only need the
+// local mic stream for the MeetingRecorder (audio-only recording).
 async function setupLocalMedia() {
-  webrtc = new WebRTCManager(meetingId, currentUser.uid, onRemoteStream, onPeerLeft, onNetworkQuality);
   try {
-    const stream = await webrtc.getLocalStream(true, true);
-    attachLocalStream(stream);
-  } catch (_) {
-    try {
-      const stream = await webrtc.getLocalStream(false, true);
-      videoEnabled = false; attachLocalStream(stream);
-      showToast("Camera unavailable — audio only.");
-    } catch (e) { showMeetingError("Microphone access denied. Please allow it and reload."); }
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    webrtc = { localStream: stream };   // minimal shim; Jitsi handles everything else
+  } catch (e) {
+    webrtc = { localStream: null };
+    showToast("Microphone unavailable — audio recording disabled.");
   }
-}
-
-function attachLocalStream(stream) {
-  addParticipantTile(currentUser.uid, currentUser.displayName, currentUser.photoURL, true, stream);
-  const vidEl = document.getElementById("vid-" + currentUser.uid);
-  if (vidEl) { vidEl.srcObject = stream; vidEl.muted = true; }
-  if (typeof _syncCamIcon === "function") _syncCamIcon(videoEnabled);
-  if (typeof _syncMicIcon === "function") _syncMicIcon(audioEnabled);
 }
 
 // ── Remote streams ────────────────────────────────────────
@@ -502,10 +494,97 @@ function _appendParticipantItem(list, uid, name, photo, isLocal, data = {}) {
   list.appendChild(item);
 }
 
-// ── WebRTC setup ──────────────────────────────────────────
+// ── Jitsi / WebRTC setup ──────────────────────────────────
 function setupWebRTC() {
-  if (!webrtc) return;
-  webrtc.joinRoom();
+  setupJitsiMeet();
+}
+
+function setupJitsiMeet() {
+  if (typeof JitsiMeetExternalAPI === "undefined") {
+    setTimeout(setupJitsiMeet, 500);
+    return;
+  }
+
+  // Firebase presence — drives AI broadcast, chat names, people list, hand raise, etc.
+  _jitsiPresRef = db.ref("presence/" + meetingId + "/" + currentUser.uid);
+  _jitsiPresRef.set({
+    userId:      currentUser.uid,
+    displayName: currentUser.displayName || "Guest",
+    photoURL:    currentUser.photoURL    || "",
+    joinedAt:    firebase.database.ServerValue.TIMESTAMP,
+    audio:       true,
+    video:       true,
+    networkQuality: "good"
+  });
+  _jitsiPresRef.onDisconnect().remove();
+
+  // Augment the webrtc shim so existing helpers (raise hand, AI mute, etc.) keep working
+  webrtc = webrtc || {};
+  webrtc.presenceRef      = _jitsiPresRef;
+  webrtc.setAudioEnabled  = (enabled) => {
+    if (!jitsiApi) return;
+    jitsiApi.isAudioMuted().then(muted => {
+      if (muted === enabled) jitsiApi.executeCommand("toggleAudio");
+    }).catch(() => {});
+  };
+  webrtc.setVideoEnabled  = (enabled) => {
+    if (!jitsiApi) return;
+    jitsiApi.isVideoMuted().then(muted => {
+      if (muted === enabled) jitsiApi.executeCommand("toggleVideo");
+    }).catch(() => {});
+  };
+  webrtc.leave = () => { if (jitsiApi) { try { jitsiApi.dispose(); } catch (_) {} jitsiApi = null; } };
+
+  // Launch Jitsi IFrame
+  jitsiApi = new JitsiMeetExternalAPI("meet.jit.si", {
+    roomName:   "meetai-" + meetingId,
+    width:      "100%",
+    height:     "100%",
+    parentNode: document.getElementById("jitsiContainer"),
+    configOverwrite: {
+      startWithAudioMuted:      false,
+      startWithVideoMuted:      false,
+      disableDeepLinking:       true,
+      prejoinPageEnabled:       false,
+      enableNoisyMicDetection:  true,
+      defaultLanguage:          "en",
+      disableThirdPartyRequests: true,
+    },
+    interfaceConfigOverwrite: {
+      TOOLBAR_BUTTONS:           [],      // MeetAI provides its own control bar
+      SHOW_JITSI_WATERMARK:      false,
+      SHOW_WATERMARK_FOR_GUESTS: false,
+      SHOW_BRAND_WATERMARK:      false,
+    },
+    userInfo: {
+      email:       currentUser.email       || "",
+      displayName: currentUser.displayName || "Guest",
+    },
+  });
+
+  // Sync Jitsi events → MeetAI UI state
+  jitsiApi.on("audioMuteStatusChanged", ({ muted }) => {
+    audioEnabled = !muted;
+    _jitsiPresRef?.update({ audio: !muted });
+    if (typeof _syncMicIcon === "function") _syncMicIcon(!muted);
+  });
+
+  jitsiApi.on("videoMuteStatusChanged", ({ muted }) => {
+    videoEnabled = !muted;
+    _jitsiPresRef?.update({ video: !muted });
+    if (typeof _syncCamIcon === "function") _syncCamIcon(!muted);
+  });
+
+  jitsiApi.on("screenSharingStatusChanged", ({ on }) => {
+    screenSharing = on;
+    // _screenSharing lives in meeting.html inline script — update via window to avoid ReferenceError
+    if (typeof window._screenSharing !== "undefined") window._screenSharing = on;
+    _jitsiPresRef?.update({ screenSharing: on });
+    if (typeof _updateScreenBtn === "function") _updateScreenBtn(on);
+  });
+
+  jitsiApi.on("participantJoined", () => updateParticipantSidebar());
+  jitsiApi.on("participantLeft",   () => updateParticipantSidebar());
 }
 
 // ── Transcription ─────────────────────────────────────────
@@ -689,17 +768,26 @@ function _broadcastAISpeaking(speaking) {
 }
 
 // ── Controls ──────────────────────────────────────────────
-function toggleMic() {
-  audioEnabled = !audioEnabled;
-  webrtc?.setAudioEnabled(audioEnabled);
-  if (typeof _syncMicIcon === "function") _syncMicIcon(audioEnabled);
+// toggleAudio is called by the mic button in meeting.html
+function toggleAudio() {
+  if (jitsiApi) {
+    jitsiApi.executeCommand("toggleAudio");
+    // audioEnabled + icon are updated via the audioMuteStatusChanged event
+  } else {
+    audioEnabled = !audioEnabled;
+    if (typeof _syncMicIcon === "function") _syncMicIcon(audioEnabled);
+  }
 }
+function toggleMic() { toggleAudio(); }
 
 function toggleVideo() {
-  videoEnabled = !videoEnabled;
-  webrtc?.setVideoEnabled(videoEnabled);
-  _setTileVideoVisible(currentUser.uid, videoEnabled);
-  if (typeof _syncCamIcon === "function") _syncCamIcon(videoEnabled);
+  if (jitsiApi) {
+    jitsiApi.executeCommand("toggleVideo");
+    // videoEnabled + icon are updated via the videoMuteStatusChanged event
+  } else {
+    videoEnabled = !videoEnabled;
+    if (typeof _syncCamIcon === "function") _syncCamIcon(videoEnabled);
+  }
 }
 
 // ── Host controls ─────────────────────────────────────────
@@ -731,7 +819,8 @@ function toggleRecording() {
 }
 
 function startRecording() {
-  if (!isHost || !webrtc?.localStream) { showToast("Camera/mic not ready yet."); return; }
+  if (!isHost) { showToast("Only the host can record."); return; }
+  if (!webrtc?.localStream) { showToast("Mic not ready — recording unavailable."); return; }
   recorder = new MeetingRecorder();
   recorder.start(webrtc.localStream, remoteStreams);
   if (typeof _syncRecordIcon === "function") _syncRecordIcon(true);
@@ -938,7 +1027,12 @@ async function _cleanup() {
   transcription?.stop();
   aiManager?.destroy();
   if (_meetingRef) _meetingRef.off();
-  if (webrtc) await webrtc.leave();
+  // Stop local mic stream used for recording
+  webrtc?.localStream?.getTracks().forEach(t => t.stop());
+  // Dispose Jitsi (handles all video/audio connections)
+  if (jitsiApi) { try { jitsiApi.dispose(); } catch (_) {} jitsiApi = null; }
+  // Remove Firebase presence so the people list updates immediately
+  try { await db.ref("presence/" + meetingId + "/" + currentUser.uid).remove(); } catch (_) {}
 }
 
 // ── Timer ─────────────────────────────────────────────────
