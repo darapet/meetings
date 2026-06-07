@@ -55,7 +55,7 @@ function RoomInner({
   const [forcedMute, setForcedMute] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<{ stop: () => void; start: () => void } | null>(null);
 
   // All tracks for the grid
   const tracks = useTracks(
@@ -149,8 +149,16 @@ function RoomInner({
       setIsTranscribing(false);
       return;
     }
-    const SR = (window as unknown as { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition
-      || (window as unknown as { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
+    type SR = {
+      continuous: boolean; interimResults: boolean; lang: string;
+      onresult: ((e: { results: { isFinal: boolean; [0]: { transcript: string } }[] }) => void) | null;
+      onerror: ((e: { error: string }) => void) | null;
+      onend: (() => void) | null;
+      start: () => void; stop: () => void;
+    };
+    type SRCtor = new () => SR;
+    const win = window as unknown as { SpeechRecognition?: SRCtor; webkitSpeechRecognition?: SRCtor };
+    const SR = win.SpeechRecognition || win.webkitSpeechRecognition;
     if (!SR) return;
     const rec = new SR();
     rec.continuous = true;
@@ -170,7 +178,7 @@ function RoomInner({
     rec.onerror = (e) => {
       if (e.error === "no-speech") return;
       if (e.error === "audio-capture") {
-        setTranscript((p) => p + " [cannot transcribe due to poor grammar or conversation] ");
+        setTranscript((p) => p + " [cannot transcribe] ");
       }
     };
     rec.onend = () => {
