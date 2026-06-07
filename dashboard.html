@@ -383,16 +383,30 @@ async function confirmCreateMeeting(e) {
   const name = document.getElementById("meetingName").value.trim() || "Untitled Meeting";
   showAuthSpinner();
   try {
+    // Enforce 500 simultaneous meeting cap
+    const allSnap = await db.ref("meetings").once("value");
+    let activeCount = 0;
+    allSnap.forEach(child => {
+      const s = child.val()?.status;
+      if (s && s !== "ended" && s !== "closed") activeCount++;
+    });
+    if (activeCount >= 500) {
+      hideAuthSpinner();
+      alert("The platform has reached the limit of 500 simultaneous meetings. Please try again once an existing meeting ends.");
+      return;
+    }
+
     const id = generateMeetingId();
     // Write to Realtime Database — no Firestore dependency
     await db.ref("meetings/" + id).set({
       name,
-      hostId:      user.uid,
-      hostName:    user.displayName || "Host",
-      status:      "active",
-      createdAt:   firebase.database.ServerValue.TIMESTAMP,
-      allowGuests: document.getElementById("allowGuests").checked,
-      transcript:  ""
+      hostId:         user.uid,
+      hostName:       user.displayName || "Host",
+      status:         "active",
+      createdAt:      firebase.database.ServerValue.TIMESTAMP,
+      allowGuests:    document.getElementById("allowGuests").checked,
+      transcript:     "",
+      maxParticipants: 500
     });
     // Also store current user as first participant
     await db.ref("meetings/" + id + "/participants/" + user.uid).set(true);
