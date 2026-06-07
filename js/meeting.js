@@ -3,8 +3,8 @@
 // ============================================================
 
 let webrtc         = null;
-let jitsiApi       = null;   // Jitsi IFrame API instance (SFU — supports 1000+ people)
-let _jitsiPresRef  = null;   // Firebase presence ref shared across helpers
+let livekitRoom    = null;   // LiveKit Room instance
+let _presRef       = null;   // Firebase presence ref
 let transcription  = null;
 let aiManager      = null;
 let meetingId      = null;
@@ -165,18 +165,10 @@ async function loadMeetingData() {
 }
 
 // ── Local media ───────────────────────────────────────────
-// With Jitsi handling all video/audio rendering, we only need the
-// local mic stream for the MeetingRecorder (audio-only recording).
+// LiveKit handles camera/mic internally; we keep a minimal shim for the recorder
 async function setupLocalMedia() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    webrtc = { localStream: stream };   // minimal shim; Jitsi handles everything else
-  } catch (e) {
-    webrtc = { localStream: null };
-    showToast("Microphone unavailable — audio recording disabled.");
-  }
+  webrtc = { localStream: null };  // filled after LiveKit connects
 }
-
 // ── Remote streams ────────────────────────────────────────
 function onRemoteStream(peerId, stream) {
   remoteStreams.set(peerId, stream);
@@ -494,100 +486,117 @@ function _appendParticipantItem(list, uid, name, photo, isLocal, data = {}) {
   list.appendChild(item);
 }
 
-// ── Jitsi / WebRTC setup ──────────────────────────────────
-function setupWebRTC() {
-  setupJitsiMeet();
+// ── LiveKit setup ────────────────────────────────────────
+
+async function generateLiveKitToken(roomName, identity, displayName) {
+  const apiKey = LIVEKIT_API_KEY, apiSecret = LIVEKIT_API_SECRET;
+  const now = Math.floor(Date.now() / 1000), exp = now + 4 * 3600;
+  const b64url = obj => btoa(unescape(encodeURIComponent(JSON.stringify(obj))))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const header  = b64url({ alg: 'HS256', typ: 'JWT' });
+  const payload = b64url({ video: { roomJoin: true, room: roomName, canPublish: true, canSubscribe: true, canPublishData: true }, sub: identity, name: displayName, iss: apiKey, nbf: now, exp });
+  const sigInput = header + '.' + payload;
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(apiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(sigInput));
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return sigInput + '.' + sigB64;
 }
 
-function setupJitsiMeet() {
-  if (typeof JitsiMeetExternalAPI === "undefined") {
-    setTimeout(setupJitsiMeet, 500);
-    return;
-  }
+function setupWebRTC() { setupLiveKit(); }
 
-  // Firebase presence — drives AI broadcast, chat names, people list, hand raise, etc.
-  _jitsiPresRef = db.ref("presence/" + meetingId + "/" + currentUser.uid);
-  _jitsiPresRef.set({
-    userId:      currentUser.uid,
-    displayName: currentUser.displayName || "Guest",
-    photoURL:    currentUser.photoURL    || "",
-    joinedAt:    firebase.database.ServerValue.TIMESTAMP,
-    audio:       true,
-    video:       true,
-    networkQuality: "good"
-  });
-  _jitsiPresRef.onDisconnect().remove();
+async function setupLiveKit() {
+  const { Room, RoomEvent, Track } = LivekitClient;
+  const roomName = 'meetai-' + meetingId;
+  const identity = currentUser.uid;
+  const displayName = currentUser.displayName || 'Guest';
 
-  // Augment the webrtc shim so existing helpers (raise hand, AI mute, etc.) keep working
+  _presRef = db.ref('presence/' + meetingId + '/' + identity);
+  _presRef.set({ userId: identity, displayName, photoURL: currentUser.photoURL || '', joinedAt: firebase.database.ServerValue.TIMESTAMP, audio: true, video: true, networkQuality: 'good' });
+  _presRef.onDisconnect().remove();
+
   webrtc = webrtc || {};
-  webrtc.presenceRef      = _jitsiPresRef;
-  webrtc.setAudioEnabled  = (enabled) => {
-    if (!jitsiApi) return;
-    jitsiApi.isAudioMuted().then(muted => {
-      if (muted === enabled) jitsiApi.executeCommand("toggleAudio");
-    }).catch(() => {});
-  };
-  webrtc.setVideoEnabled  = (enabled) => {
-    if (!jitsiApi) return;
-    jitsiApi.isVideoMuted().then(muted => {
-      if (muted === enabled) jitsiApi.executeCommand("toggleVideo");
-    }).catch(() => {});
-  };
-  webrtc.leave = () => { if (jitsiApi) { try { jitsiApi.dispose(); } catch (_) {} jitsiApi = null; } };
+  webrtc.presenceRef     = _presRef;
+  webrtc.setAudioEnabled = (on) => livekitRoom?.localParticipant?.setMicrophoneEnabled(on).catch(() => {});
+  webrtc.setVideoEnabled = (on) => livekitRoom?.localParticipant?.setCameraEnabled(on).catch(() => {});
+  webrtc.leave           = () => livekitRoom?.disconnect();
 
-  // Launch Jitsi IFrame
-  jitsiApi = new JitsiMeetExternalAPI("meet.jit.si", {
-    roomName:   "meetai-" + meetingId,
-    width:      "100%",
-    height:     "100%",
-    parentNode: document.getElementById("jitsiContainer"),
-    configOverwrite: {
-      startWithAudioMuted:      false,
-      startWithVideoMuted:      false,
-      disableDeepLinking:       true,
-      prejoinPageEnabled:       false,
-      enableNoisyMicDetection:  true,
-      defaultLanguage:          "en",
-      disableThirdPartyRequests: true,
-    },
-    interfaceConfigOverwrite: {
-      TOOLBAR_BUTTONS:           [],      // MeetAI provides its own control bar
-      SHOW_JITSI_WATERMARK:      false,
-      SHOW_WATERMARK_FOR_GUESTS: false,
-      SHOW_BRAND_WATERMARK:      false,
-    },
-    userInfo: {
-      email:       currentUser.email       || "",
-      displayName: currentUser.displayName || "Guest",
-    },
+  const token = await generateLiveKitToken(roomName, identity, displayName);
+  livekitRoom = new Room({ adaptiveStream: true, dynacast: true });
+
+  livekitRoom
+    .on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
+      _lkAttach(track, participant.identity, participant.name || participant.identity);
+    })
+    .on(RoomEvent.TrackUnsubscribed, (track) => { track.detach(); })
+    .on(RoomEvent.ParticipantConnected, (p) => {
+      _lkTile(p.identity, p.name || p.identity, false);
+      onRemoteStream(p.identity, new MediaStream());
+    })
+    .on(RoomEvent.ParticipantDisconnected, (p) => {
+      document.getElementById('tile-' + p.identity)?.remove();
+      onPeerLeft(p.identity);
+    });
+
+  livekitRoom.localParticipant.on('trackMuted', pub => {
+    if (pub.kind === Track.Kind.Audio) { audioEnabled = false; _presRef?.update({ audio: false }); if (typeof _syncMicIcon === 'function') _syncMicIcon(false); }
+    if (pub.kind === Track.Kind.Video) { videoEnabled = false; _presRef?.update({ video: false }); if (typeof _syncCamIcon === 'function') _syncCamIcon(false); }
+  });
+  livekitRoom.localParticipant.on('trackUnmuted', pub => {
+    if (pub.kind === Track.Kind.Audio) { audioEnabled = true; _presRef?.update({ audio: true }); if (typeof _syncMicIcon === 'function') _syncMicIcon(true); }
+    if (pub.kind === Track.Kind.Video) { videoEnabled = true; _presRef?.update({ video: true }); if (typeof _syncCamIcon === 'function') _syncCamIcon(true); }
   });
 
-  // Sync Jitsi events → MeetAI UI state
-  jitsiApi.on("audioMuteStatusChanged", ({ muted }) => {
-    audioEnabled = !muted;
-    _jitsiPresRef?.update({ audio: !muted });
-    if (typeof _syncMicIcon === "function") _syncMicIcon(!muted);
-  });
-
-  jitsiApi.on("videoMuteStatusChanged", ({ muted }) => {
-    videoEnabled = !muted;
-    _jitsiPresRef?.update({ video: !muted });
-    if (typeof _syncCamIcon === "function") _syncCamIcon(!muted);
-  });
-
-  jitsiApi.on("screenSharingStatusChanged", ({ on }) => {
-    screenSharing = on;
-    // _screenSharing lives in meeting.html inline script — update via window to avoid ReferenceError
-    if (typeof window._screenSharing !== "undefined") window._screenSharing = on;
-    _jitsiPresRef?.update({ screenSharing: on });
-    if (typeof _updateScreenBtn === "function") _updateScreenBtn(on);
-  });
-
-  jitsiApi.on("participantJoined", () => updateParticipantSidebar());
-  jitsiApi.on("participantLeft",   () => updateParticipantSidebar());
+  try {
+    await livekitRoom.connect(LIVEKIT_URL, token);
+    await livekitRoom.localParticipant.enableCameraAndMicrophone();
+    const camPub = [...livekitRoom.localParticipant.videoTrackPublications.values()][0];
+    if (camPub?.videoTrack) {
+      const el = camPub.videoTrack.attach();
+      el.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:8px;background:#000;';
+      const tile = _lkTile(identity, displayName + ' (You)', true);
+      tile.querySelector('.lk-video').appendChild(el);
+    }
+    const micPub = [...livekitRoom.localParticipant.audioTrackPublications.values()][0];
+    if (micPub?.track?.mediaStreamTrack) webrtc.localStream = new MediaStream([micPub.track.mediaStreamTrack]);
+    showToast('✦ Connected to LiveKit room');
+  } catch (err) {
+    console.error('LiveKit connect error:', err);
+    showToast('Video connection failed: ' + err.message);
+  }
 }
 
-// ── Transcription ─────────────────────────────────────────
+function _lkTile(identity, name, isLocal) {
+  let tile = document.getElementById('tile-' + identity);
+  if (!tile) {
+    const grid = document.getElementById('livekitGrid');
+    tile = document.createElement('div');
+    tile.id = 'tile-' + identity;
+    tile.style.cssText = 'position:relative;background:#1a1e2a;border-radius:10px;overflow:hidden;aspect-ratio:16/9;min-height:160px;display:flex;align-items:center;justify-content:center;';
+    tile.innerHTML = '<div class="lk-video" style="width:100%;height:100%;"></div><div style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,0.65);color:#fff;padding:3px 8px;border-radius:6px;font-size:0.78rem;font-weight:600;">' + escapeHtml(name) + (isLocal ? '' : '') + '</div>';
+    if (grid) grid.appendChild(tile);
+  }
+  return tile;
+}
+
+function _lkAttach(track, identity, name) {
+  const el = track.attach();
+  if (track.kind === 'audio') { el.style.display = 'none'; document.body.appendChild(el); return; }
+  el.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:8px;background:#000;';
+  const tile = _lkTile(identity, name, false);
+  tile.querySelector('.lk-video').innerHTML = '';
+  tile.querySelector('.lk-video').appendChild(el);
+}
+
+async function toggleScreenShare() {
+  if (!livekitRoom) { showToast('Video not ready yet.'); return; }
+  try {
+    screenSharing = !screenSharing;
+    await livekitRoom.localParticipant.setScreenShareEnabled(screenSharing);
+    _presRef?.update({ screenSharing });
+    if (typeof _updateScreenBtn === 'function') _updateScreenBtn(screenSharing);
+  } catch (err) { screenSharing = !screenSharing; showToast('Screen share: ' + err.message); }
+}
+
 function setupTranscription() {
   if (typeof LiveTranscription === "undefined") return;
   transcription = new LiveTranscription(
@@ -770,26 +779,17 @@ function _broadcastAISpeaking(speaking) {
 // ── Controls ──────────────────────────────────────────────
 // toggleAudio is called by the mic button in meeting.html
 function toggleAudio() {
-  if (jitsiApi) {
-    jitsiApi.executeCommand("toggleAudio");
-    // audioEnabled + icon are updated via the audioMuteStatusChanged event
-  } else {
-    audioEnabled = !audioEnabled;
-    if (typeof _syncMicIcon === "function") _syncMicIcon(audioEnabled);
-  }
+  audioEnabled = !audioEnabled;
+  livekitRoom?.localParticipant?.setMicrophoneEnabled(audioEnabled).catch(() => {});
+  if (typeof _syncMicIcon === "function") _syncMicIcon(audioEnabled);
 }
 function toggleMic() { toggleAudio(); }
 
 function toggleVideo() {
-  if (jitsiApi) {
-    jitsiApi.executeCommand("toggleVideo");
-    // videoEnabled + icon are updated via the videoMuteStatusChanged event
-  } else {
-    videoEnabled = !videoEnabled;
-    if (typeof _syncCamIcon === "function") _syncCamIcon(videoEnabled);
-  }
+  videoEnabled = !videoEnabled;
+  livekitRoom?.localParticipant?.setCameraEnabled(videoEnabled).catch(() => {});
+  if (typeof _syncCamIcon === "function") _syncCamIcon(videoEnabled);
 }
-
 // ── Host controls ─────────────────────────────────────────
 function updateHostControls() {
   const panel   = document.getElementById("hostControls");
