@@ -198,9 +198,14 @@ function RoomInner({
     setLocation("/");
   };
 
-  const copyMeetingId = () => {
-    navigator.clipboard.writeText(meetingId);
-    toast.success("Meeting ID copied!");
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const copyMeetingLink = () => {
+    const url = `${window.location.origin}${import.meta.env.BASE_URL}room/${meetingId}?roomName=${encodeURIComponent(roomName)}&title=${encodeURIComponent(title)}`;
+    navigator.clipboard.writeText(url);
+    toast.success("Meeting link copied — share it with anyone!");
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2500);
   };
 
   const sidePanel = chatOpen || participantsOpen || hostControlsOpen;
@@ -212,11 +217,15 @@ function RoomInner({
         <div className="flex items-center gap-2">
           <span className="font-semibold text-sm truncate max-w-[180px]">{title}</span>
           <button
-            onClick={copyMeetingId}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition px-2 py-1 rounded-lg hover:bg-muted"
-            title="Copy meeting ID"
+            onClick={copyMeetingLink}
+            className={`flex items-center gap-1.5 text-xs transition px-2.5 py-1.5 rounded-lg border ${
+              linkCopied
+                ? "text-green-400 border-green-400/30 bg-green-400/10"
+                : "text-muted-foreground border-border hover:text-foreground hover:bg-muted"
+            }`}
+            title="Copy shareable meeting link"
           >
-            <Copy className="w-3 h-3" /> {meetingId.slice(0, 8)}…
+            <Copy className="w-3 h-3" /> {linkCopied ? "Copied!" : "Copy Link"}
           </button>
         </div>
 

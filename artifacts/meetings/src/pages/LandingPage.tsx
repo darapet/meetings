@@ -8,8 +8,8 @@ import {
 } from "firebase/firestore";
 import { toast } from "sonner";
 import {
-  Video, Plus, LogIn, LogOut, Users, Clock, Shield, Loader2,
-  Zap, Globe, Lock,
+  Video, Plus, LogIn, LogOut, Users, Clock, Loader2,
+  Zap, Globe, Lock, Link, Check,
 } from "lucide-react";
 
 interface MeetingDoc {
@@ -30,6 +30,7 @@ export default function LandingPage() {
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
   const [activeMeetings, setActiveMeetings] = useState<MeetingDoc[]>([]);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -225,7 +226,17 @@ export default function LandingPage() {
               Active Meetings ({activeMeetings.length}/5)
             </h2>
             <div className="space-y-3">
-              {activeMeetings.map((m) => (
+              {activeMeetings.map((m) => {
+                const copyLink = (e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  const base = window.location.origin + (import.meta.env.BASE_URL || "/");
+                  const url = `${base}room/${m.id}?roomName=${encodeURIComponent(m.roomName)}&title=${encodeURIComponent(m.title)}`;
+                  navigator.clipboard.writeText(url);
+                  setCopiedId(m.id);
+                  toast.success("Meeting link copied!");
+                  setTimeout(() => setCopiedId(null), 2500);
+                };
+                return (
                 <div
                   key={m.id}
                   className="bg-card border border-border rounded-xl p-4 flex items-center justify-between hover:border-primary/40 transition cursor-pointer"
@@ -244,11 +255,29 @@ export default function LandingPage() {
                       </div>
                     </div>
                   </div>
-                  <button className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90 transition">
-                    Join
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={copyLink}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                        copiedId === m.id
+                          ? "text-green-400 border-green-400/30 bg-green-400/10"
+                          : "text-muted-foreground border-border hover:bg-muted"
+                      }`}
+                      title="Copy shareable link"
+                    >
+                      {copiedId === m.id ? <Check className="w-3 h-3" /> : <Link className="w-3 h-3" />}
+                      {copiedId === m.id ? "Copied!" : "Copy Link"}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setLocation(`/room/${m.id}?roomName=${m.roomName}&title=${encodeURIComponent(m.title)}`); }}
+                      className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90 transition"
+                    >
+                      Join
+                    </button>
+                  </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
