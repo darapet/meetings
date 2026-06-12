@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { setBaseUrl } from "@workspace/api-client-react";
 import App from "./App";
+import "@livekit/components-styles";
 import "./index.css";
 
 // In production (GitHub Pages), VITE_API_BASE_URL points to the deployed API server.
